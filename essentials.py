@@ -34,9 +34,9 @@ def avg_cube(directory, cubename, outname):
     return
 
 
-def calibrate_cube(directory, cubename, cali_dir, biasname, darkname, darkexptime, flatname):
+def calibrate_cube(directory, cubename, cali_dir, biasname, darkname, darkexptime, flatname, out_dir):
     """
-    Reduce 3D cube by master dark, bias, flat; output to subdir 'reduced_cubes'.
+    Reduce 3D cube by master dark, bias, flat; output to out_dir.
     """
     # load data cube and master calibration frames
     cube = CCDData.read(os.path.join(directory, cubename), unit=u.dimensionless_unscaled)
@@ -60,15 +60,16 @@ def calibrate_cube(directory, cubename, cali_dir, biasname, darkname, darkexptim
         reduced_cube.append(reduced_img)
 
     # create 'reduced_cubes' subdirectory
-    if not os.path.exists(os.path.join(directory, 'reduced_cubes')):
-        print('Created /reduced_cubes subfolder')
-        os.mkdir(os.path.join(directory, 'reduced_cubes'))
+    if not os.path.exists(out_dir):
+        print('Created', out_dir)
+        os.mkdir(out_dir)
     
     # write to 3D cube in 'reduced_cubes', name=cubename_reduced, header=original cube header
     reduced_cube = np.asarray(reduced_cube)
     reduced_cube = reduced_cube.astype('float32')
-    fits.writeto(os.path.join(directory,'reduced_cubes',cubename[:-5]+'_reduced.fits'), 
-                reduced_cube, header=cube.header, overwrite=True)
+    fits.writeto(os.path.join(out_dir, cubename[:-5]+'_reduced.fits'), 
+                    reduced_cube, header=cube.header, overwrite=True)
+
     return
 
 
@@ -80,23 +81,23 @@ def solve_img(directory, imgname):
     return wcs_header
 
 
-def solve_and_align(directory, cubename):
+def solve_and_align(directory, cubename, out_dir):
     """
     Solve the first frame of a 3D cube, align other frames to it.
-    Output an aligned WCS cube to subdir 'aligned_cubes'. 
+    Output an aligned WCS cube to out_dir. 
     Note the wait time for astrometry.net varies greatly with time of day.
     """
     # read from 3D cube and obtain its 1st frame for solving and as reference frame
-    hdulist = fits.open(os.path.join(directory, cubename))
-    hdu = hdulist[0]
-    ref_img = hdu.data[0]
-    cube = np.float32(hdu.data)
     # IMPORTANT: np.float32 is to reset endian-ness for astroalign, do not modify
     # FITS from fits.writeto has a different endian-ness that is incompatable with astroalign
     # otherwise will raises ValueError: Big-endian buffer not supported on little-endian compiler
-    # This issue is introduced in new versions of scikit-image that astroalign calls on
+    # This issue is introduced in new versions of scikit-image that astroalign relies on
+    hdulist = fits.open(os.path.join(directory, cubename))
+    hdu = hdulist[0]
+    cube = np.float32(hdu.data)
+    ref_img = cube[0]
 
-    # obtain essential keys from cube header
+    # obtain essential cards from cube header
     nframes = int(hdu.header['NAXIS3'])
     assert nframes == len(cube)
     exptime = float(hdu.header['EXPTIME'])
@@ -105,9 +106,48 @@ def solve_and_align(directory, cubename):
     # write 1st frame of cube to a temporary 2D fits and solve it
     fits.writeto(os.path.join(directory, 'solve_temporary.fits'), ref_img, header=hdu.header, overwrite=True)
     wcs_header = solve_img(directory, 'solve_temporary.fits')
-    # os.remove(os.path.join(directory, 'solve_temporary.fits'))
+    os.remove(os.path.join(directory, 'solve_temporary.fits'))
 
-    return wcs_header
+    # convolve ref_img before astroalign source detection
+    # convolved data only used for alignment; original data is used for writing to new cube
+    sigma = 3.0 * gaussian_fwhm_to_sigma  # FWHM = 3.
+    kernel = Gaussian2DKernel(sigma, x_size=3, y_size=3)
+    convolved_ref_img = convolve(ref_img, kernel, normalize_kernel=True)
+
+    # convolve and align every frame to ref_img and obtain transformation parameters
+    # reproject original frames using transformation parameters
+    aligned_list = [ref_img]
+    for n in range(1, nframes):
+        img_to_align = cube[n]
+        convolved_img_to_align = convolve(img_to_align, kernel, normalize_kernel=True)
+        p, (pos_img, pos_img_rot) = aa.find_transform(convolved_img_to_align, 
+                                                        convolved_ref_img, detection_sigma=2.0)
+        aligned_img, footprint = aa.apply_transform(p, img_to_align, ref_img)
+
+        print("\nRotation: {:.2f} degrees".format(p.rotation * 180.0 / np.pi))
+        print("Scale factor: {:.4f}".format(p.scale))
+        print("Translation: (x, y) = ({:.2f}, {:.2f})".format(*p.translation))
+
+        aligned_list.append(aligned_img)
+        print('current array len =', len(aligned_list))
+    
+    # correct data type for aligned frames
+    aligned_array = np.array(aligned_list)
+    aligned_array = aligned_array.astype('float32')
+    print('final array shape =', aligned_array.shape)
+
+    # add essential cards from original header to WCS header; write to WCS fits
+    wcs_header.set('EXPTIME', exptime, before='CTYPE1')
+    wcs_header.set('DATE-OBS', dateobs, before='CTYPE1')
+
+    # create out_dir directory and write WCS cube to it
+    if not os.path.exists(out_dir):
+        print('Created', out_dir)
+        os.mkdir(out_dir)
+    fits.writeto(os.path.join(out_dir, cubename[:-5]+'_aligned.fits'), 
+                    aligned_array, header=wcs_header, overwrite=True)
+
+    return
 
 
             
