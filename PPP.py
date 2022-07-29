@@ -5,18 +5,19 @@ from glob import glob1
 import astropy.units as u
 
 
-directory = '/Users/danny/Mirror/ASTRO/JPL_NEO/Contact_Binary/data/CSS_034852/20220717'
+directory = '/Users/danny/Mirror/ASTRO/JPL_NEO/Contact_Binary/data/CSS_034852/20220716'
 cubelist = sorted(glob1(directory, '*.fits'))
 
 
-# for cubename in cubelist:
-#     calibrate_cube(directory=directory, cubename=cubename, 
-#                     cali_dir='/Users/danny/Mirror/ASTRO/JPL_NEO/Calibration', 
-#                     biasname='master_bias_20220726.fits', 
-#                     darkname='master_dark_20220726.fits', 
-#                     darkexptime=10.0, 
-#                     flatname='master_flat11_20220713.fits', 
-#                     out_dir=os.path.join(directory, 'reduced_cubes'))
+for cubename in cubelist:
+    calibrate_cube(directory=directory, cubename=cubename, 
+                    cali_dir='/Users/danny/Mirror/ASTRO/JPL_NEO/Calibration', 
+                    biasname='master_bias_20220726.fits', 
+                    darkname='master_dark_20220726.fits', 
+                    darkexptime=10.0, 
+                    flatname='master_flat11_20220713.fits', 
+                    out_dir=os.path.join(directory, 'reduced_cubes'))
+
 
 # %%
 
