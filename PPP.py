@@ -5,7 +5,7 @@ from glob import glob1
 import astropy.units as u
 
 
-directory = '/Users/danny/Mirror/ASTRO/JPL_NEO/Contact_Binary/data/CSS_034852/20220716'
+directory = '/Users/danny/Mirror/ASTRO/JPL_NEO/Contact_Binary/data/CSS_034852/20220719'
 cubelist = sorted(glob1(directory, '*.fits'))
 
 
