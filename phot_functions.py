@@ -250,6 +250,44 @@ def detect_stars(img, wcs, radius=None, r_in=None, r_out=None, xbounds=None, ybo
 
 
 
+def simple_photometry(directory, cubename, target_coord, radius, 
+                        annulus=False, r_in=None, r_out=None):
+    """
+    Simple time-resolved circular aperture/annulus photometry on one RA-Dec. 
+    """
+    return
+
+
+def multithread_photometry(directory, cubename, sky_aperture, radius, 
+                            annulus=False, r_in=None, r_out=None, sky_annulus=None):
+    """
+    Time-resolved circular aperture/annulus photometry on multiple RA-Dec coordinates.
+    Must provide a sky_aperture object containing RA-Decs. 
+    """
+    return
+
+
+def check_ref_lightcurve(ref_flux_table='xxxx.ecsv'):
+    """
+    Visualize lightcurves for reference stars. 
+    """
+    return
+
+
+def differential_photometry(directory, target_flux='target_flux.ecsv', ref_flux='ref_flux.ecsv', reflist=None):
+    """
+    Differential photometry from selected reference stars. 
+    Output diff_lc.
+    """
+    return
+
+
+def visualize_lightcurve(directory, diff_lc='diff_lc.ecsv'):
+    """
+    Visualize lightcurve from differential photometry. 
+    """
+    return
+
 
 
 
