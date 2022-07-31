@@ -164,7 +164,7 @@ def detect_stars(img, wcs, radius=None, r_in=None, r_out=None, xbounds=None, ybo
         fig.set_figwidth(6)
         ax1.set_title('Source Detection (aperture mask, border rejection)', fontsize=10)
         # image normalization: interval and stretch
-        norm = ImageNormalize(img, interval=ZScaleInterval(), stretch=PowerStretch(1.1))
+        norm = ImageNormalize(img, interval=ZScaleInterval(), stretch=PowerStretch(1.5))
         # show im0 (background image) in grey scale
         im0 = ax1.imshow(img, cmap='Greys', origin='lower', norm=norm)
         # define bounding box for im1 (image in front) and show im1 using colored cmap
@@ -180,13 +180,13 @@ def detect_stars(img, wcs, radius=None, r_in=None, r_out=None, xbounds=None, ybo
         # draw circular apertures for detected sources
         for n in range(len(table)):
             ax1.add_patch(Circle((table[n]['xcentroid']+xbounds[0], table[n]['ycentroid']+ybounds[0]),
-                                    radius=radius, fill=False, color='fuchsia', lw=0.3))
+                                    radius=radius, fill=False, color='white', lw=0.3))
             if r_in and r_out:
                 # draw circular annulus for detected sources
                 ax1.add_patch(Circle((table[n]['xcentroid']+xbounds[0], table[n]['ycentroid']+ybounds[0]),
-                                        radius=r_in, fill=False, color='red', lw=0.2, alpha=0.8))
+                                        radius=r_in, fill=False, color='red', lw=0.3, alpha=0.8))
                 ax1.add_patch(Circle((table[n]['xcentroid']+xbounds[0], table[n]['ycentroid']+ybounds[0]),
-                                        radius=r_out, fill=False, color='red', lw=0.2, alpha=0.8))
+                                        radius=r_out, fill=False, color='red', lw=0.3, alpha=0.8))
         if target_coord:
             # draw circular aperture for target RA-Dec
             ax1.add_patch(Circle((pixel_coord[0]+xbounds[0], pixel_coord[1]+ybounds[0]), 
