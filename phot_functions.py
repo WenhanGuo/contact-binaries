@@ -21,6 +21,8 @@ from scipy.signal import savgol_filter
 
 import matplotlib.pylab as plt
 from matplotlib.patches import Rectangle, Circle
+from matplotlib.ticker import MaxNLocator
+import matplotlib.dates as mdates
 from astropy.visualization import ZScaleInterval, MinMaxInterval, PowerStretch, LogStretch
 from astropy.visualization.mpl_normalize import ImageNormalize
 
@@ -149,7 +151,7 @@ def detect_stars(img, wcs, radius=None, r_in=None, r_out=None, xbounds=None, ybo
 
     if visu == True:
         assert type(visu_dir) == str
-        # creating grid for subplots
+        # create grid for subplots
         fig = plt.figure()
         ax1 = plt.subplot2grid(shape=(3, 4), loc=(0, 0), colspan=3, rowspan=3)
         ax2 = plt.subplot2grid(shape=(3, 4), loc=(0, 3), colspan=1, rowspan=1)
@@ -160,7 +162,9 @@ def detect_stars(img, wcs, radius=None, r_in=None, r_out=None, xbounds=None, ybo
             ax.tick_params(labelbottom=False, labelleft=False)
 
         plt.suptitle('Background Subtraction and Source Detection', fontsize=12)
-    
+
+        # drawing main source detection plot
+        # ----------------------------------
         fig.set_figheight(6)
         fig.set_figwidth(6)
         ax1.set_title('Source Detection (aperture mask, border rejection)', fontsize=10)
@@ -180,14 +184,17 @@ def detect_stars(img, wcs, radius=None, r_in=None, r_out=None, xbounds=None, ybo
                                 fill=False, lw=0.3))
         # draw circular apertures for detected sources
         for n in range(len(table)):
-            ax1.add_patch(Circle((table[n]['xcentroid']+xbounds[0], table[n]['ycentroid']+ybounds[0]),
-                                    radius=radius, fill=False, color='white', lw=0.3))
+            # define center pixel positions (cenx, ceny) and draw circles around each center
+            cenx = table[n]['xcentroid']+xbounds[0]
+            ceny = table[n]['ycentroid']+ybounds[0]
+            circle = Circle((cenx, ceny), radius=radius, fill=False, color='white', lw=0.3)
+            ax1.add_patch(circle)
+            # annotate reference star number next to detection circles
+            ax1.annotate(str(n+1), (cenx+25, ceny-30), color='black', fontsize=5, ha='center', va='center')
             if r_in and r_out:
                 # draw circular annulus for detected sources
-                ax1.add_patch(Circle((table[n]['xcentroid']+xbounds[0], table[n]['ycentroid']+ybounds[0]),
-                                        radius=r_in, fill=False, color='red', lw=0.3, alpha=0.8))
-                ax1.add_patch(Circle((table[n]['xcentroid']+xbounds[0], table[n]['ycentroid']+ybounds[0]),
-                                        radius=r_out, fill=False, color='red', lw=0.3, alpha=0.8))
+                ax1.add_patch(Circle((cenx, ceny), radius=r_in, fill=False, color='red', lw=0.3, alpha=0.8))
+                ax1.add_patch(Circle((cenx, ceny), radius=r_out, fill=False, color='red', lw=0.3, alpha=0.8))
         if target_coord:
             # draw circular aperture for target RA-Dec
             ax1.add_patch(Circle((pixel_coord[0]+xbounds[0], pixel_coord[1]+ybounds[0]), 
@@ -207,25 +214,32 @@ def detect_stars(img, wcs, radius=None, r_in=None, r_out=None, xbounds=None, ybo
         cbar1.ax.tick_params(labelsize=8)
 
         # plot original image with interval=[0,500]
+        # -----------------------------------------
         fig.set_figheight(6)
         fig.set_figwidth(9)
         ax2.set_title('Original Image', fontsize=8)
         im2 = ax2.imshow(img + skymap, cmap='RdYlBu_r', origin='lower', vmin=0, vmax=500)
+        # draw colorbar
         cbar2 = fig.colorbar(im2, ax=ax2, location='right')
         cbar2.ax.tick_params(labelsize=6)
 
         # plot background subtracted image with interval=[0,500]
+        # ------------------------------------------------------
         ax3.set_title('Background Subtracted Image', fontsize=8)
         im3 = ax3.imshow(img, cmap='RdYlBu_r', origin='lower', vmin=0, vmax=500)
+        # draw colorbar
         cbar3 = fig.colorbar(im3, ax=ax3, location='right')
         cbar3.ax.tick_params(labelsize=6)
 
         # plot skymap estimation from original image
+        # ------------------------------------------
         ax4.set_title('Skymap Estimation', fontsize=8)
         im4 = ax4.imshow(skymap, cmap='RdYlBu_r', origin='lower')
+        # draw colorbar
         cbar4 = fig.colorbar(im4, ax=ax4, location='right')
         cbar4.ax.tick_params(labelsize=6)
 
+        # tight layout and output pdf
         plt.tight_layout()
         if high_res == True:
             plt.savefig(os.path.join(visu_dir, 'source_detection.pdf'), dpi=1200)
@@ -234,11 +248,10 @@ def detect_stars(img, wcs, radius=None, r_in=None, r_out=None, xbounds=None, ybo
         plt.show()
 
 
-    # create sky-aperture object
+    # create sky_aperture object and sky_annulus object
     positions = []
     for n in range(len(table)):
         positions.append((table[n]['xcentroid'], table[n]['ycentroid']))
-
     aperture = CircularAperture(positions, r=radius)
     sky_aperture = aperture.to_sky(wcs)
     if r_in == None or r_out == None:
@@ -357,69 +370,91 @@ def multithread_photometry(directory, cubename, sky_aperture, annulus=False, sky
 
 
 def quicklook_lightcurve(directory, visu_dir, ref_flux_table='ref_flux.ecsv', 
-                            ylim=[0.85, 1.15], normalize=True):
+                            ylim=[0.85, 1.15], layout=[4, 6], normalize=True):
     """
     Visualize lightcurves for reference stars. 
     """
     table = TimeSeries.read(os.path.join(directory, ref_flux_table), time_column='time')
     # each row of table['ref_flux'] column contains a list of reference flux
     # table['ref_flux'] is thus a 2d numpy array; we can treat it as an image in all cases
-    # from now on, table['ref_flux'] is refered to 'reference flux map' (RFM)
+    # from now on, table['ref_flux'] is refered to as 'reference flux map' (RFM)
     # x axis of RFM = number of reference stars
     # y axis of RFM = time-dependent flux
     RFM = table['ref_flux']
 
     # number of reference stars = width of RFM
     nref = RFM.shape[1]
-    nrows = 4
-    ncols = nref // nrows
 
+    nrows, ncols = layout[0], layout[1]
     fig, axes = plt.subplots(nrows=nrows, ncols=ncols, figsize=(28, 20))
-    fig.suptitle('Reference Stars Lightcurves', fontsize=30)
+    fig.suptitle('Reference Stars Lightcurves', fontsize=30, y=0.92)
     for nrow in range(nrows):
         for ncol in range(ncols):
+            # n = reference star number
             n = nrow * ncols + ncol
             if normalize == True:
+                # normalize flux for each reference star = normalize RFM by column median
                 norm_nflux = RFM[:, n] / np.median(RFM[:, n])
+                # set the same ylim for all normalized flux plots
                 axes[nrow][ncol].set_ylim(ylim)
+                # scatter normalized flux write original median flux to legend
                 axes[nrow][ncol].scatter(table.time.datetime64, norm_nflux, 
                                     s=10, marker='x', color='k', linewidth=0.5, 
                                     label='ref'+str(n+1)+', median≈'+str(int(round(np.median(RFM[:, n]),-2))))
+                # smooth normalized flux by a Savitzky-Golay rolling mean of deg=1
                 smooth_nflux = savgol_filter(norm_nflux, window_length=51, polyorder=1)
+                # plot smoothed normalized flux curve in red
                 axes[nrow][ncol].plot(table.time.datetime64, smooth_nflux, 
                                     markersize=0, marker='.', color='tab:red', linewidth=2)
             else:
+                # scatter raw flux for each reference star
                 axes[nrow][ncol].scatter(table.time.datetime64, RFM[:, n], 
                                     s=10, marker='x', color='k', linewidth=0.5, label='ref'+str(n+1))
+                # smooth raw flux by a Savitzky-Golay rolling mean of deg=1
                 smooth_nflux = savgol_filter(RFM[:, n], window_length=51, polyorder=1)
+                # plot smoothed raw flux curve in red
                 axes[nrow][ncol].plot(table.time.datetime64, smooth_nflux, 
                                     markersize=0, marker='.', color='tab:red', linewidth=2)
+            # format plot and axis labels
+            axes[nrow][ncol].grid(True)
             axes[nrow][ncol].legend(loc='upper left', fontsize=14)
-    plt.tight_layout()
+            axes[nrow][ncol].xaxis.set_major_locator(MaxNLocator(7))
+            axes[nrow][ncol].xaxis.set_major_formatter(
+                                    mdates.ConciseDateFormatter(axes[nrow][ncol].xaxis.get_major_locator()))
     plt.savefig(os.path.join(visu_dir, 'reference_stars_lc.pdf'))
 
 
+    # if we transpose RFM, its row = each reference star; column = time-dependent flux
+    # the transposed RFM is refered to as 'spectrum'
+    # the wavelength axis of a normal spectrum is now a time axis for the RFM spectrum
     spectrum = RFM.transpose()
     if normalize == True:
         fig, ax = plt.subplots(nrows=1, ncols=1, figsize=(8, 6))
         fig.suptitle('Reference Flux Map (RFM)')
 
+        # sort spectrum by row median (median flux for each reference star) in descending order; get sort_index
+        sort_index = np.median(spectrum, axis=1).argsort()[::-1]
+        # normalize spectrum by row
         normalized_spectrum = sknorm(spectrum, axis=1)
-        sort_index = np.median(normalized_spectrum, axis=1).argsort()[::-1]
         sorted_spec = normalized_spectrum[sort_index]
         sorted_spec = sorted_spec * (1 / np.median(sorted_spec))
 
+        # plot the flux-sorted spectrum as an image
+        # set spectrum color range = ylim for normalized reference star lc
         im1 = ax.imshow(sorted_spec, cmap='viridis', aspect='auto', 
                         interpolation='None', vmin=ylim[0], vmax=ylim[1])
         fig.colorbar(im1, ax=ax, location='right', aspect=30, pad=0.03, 
                             label='normalized flux')
+
+        # configure yticks and yticklabels to represent correct reference star number
         ax.set_yticks(np.arange(start=0, stop=nref))
         labels = [str(n+1) for n in sort_index]
         labels = ['ref'+m for m in labels]
         ax.set_yticklabels(labels, fontsize=8)
         ax.set_xlabel('Time', fontsize=10)
-        ax.set_ylabel('reference star number (median flux sorted)')
+        ax.set_ylabel('reference star number  - - - median flux + + +')
 
+    # tight layout and output png
     plt.tight_layout()
     plt.savefig(os.path.join(visu_dir, 'RFM_spectrum.png'), dpi=1200)
 
