@@ -164,7 +164,7 @@ def detect_stars(img, wcs, radius=None, r_in=None, r_out=None, xbounds=None, ybo
         fig.set_figwidth(6)
         ax1.set_title('Source Detection (aperture mask, border rejection)', fontsize=10)
         # image normalization: interval and stretch
-        norm = ImageNormalize(img, interval=ZScaleInterval(), stretch=PowerStretch(2))
+        norm = ImageNormalize(img, interval=ZScaleInterval(), stretch=PowerStretch(1.1))
         # show im0 (background image) in grey scale
         im0 = ax1.imshow(img, cmap='Greys', origin='lower', norm=norm)
         # define bounding box for im1 (image in front) and show im1 using colored cmap
@@ -175,30 +175,30 @@ def detect_stars(img, wcs, radius=None, r_in=None, r_out=None, xbounds=None, ybo
                     s=10, marker='+', color='lime', linewidth=0.5)
         # draw bounding box
         ax1.add_patch(Rectangle((xbounds[0], ybounds[0]), xbounds[1]-xbounds[0], ybounds[1]-ybounds[0],
-                                linestyle = 'dashed', edgecolor = 'lime', 
-                                fill=False, lw=1))
+                                linestyle = 'dashed', edgecolor = 'black', 
+                                fill=False, lw=0.3))
         # draw circular apertures for detected sources
         for n in range(len(table)):
             ax1.add_patch(Circle((table[n]['xcentroid']+xbounds[0], table[n]['ycentroid']+ybounds[0]),
-                                    radius=radius, fill=False, color='white', lw=0.5))
+                                    radius=radius, fill=False, color='fuchsia', lw=0.3))
             if r_in and r_out:
                 # draw circular annulus for detected sources
                 ax1.add_patch(Circle((table[n]['xcentroid']+xbounds[0], table[n]['ycentroid']+ybounds[0]),
-                                        radius=r_in, fill=False, color='red', lw=0.3, alpha=0.8))
+                                        radius=r_in, fill=False, color='red', lw=0.2, alpha=0.8))
                 ax1.add_patch(Circle((table[n]['xcentroid']+xbounds[0], table[n]['ycentroid']+ybounds[0]),
-                                        radius=r_out, fill=False, color='red', lw=0.3, alpha=0.8))
+                                        radius=r_out, fill=False, color='red', lw=0.2, alpha=0.8))
         if target_coord:
             # draw circular aperture for target RA-Dec
             ax1.add_patch(Circle((pixel_coord[0]+xbounds[0], pixel_coord[1]+ybounds[0]), 
-                                    radius=radius, fill=False, color='fuchsia', lw=0.5))
+                                    radius=radius, fill=False, color='fuchsia', lw=0.3))
             ax1.scatter(pixel_coord[0]+xbounds[0], pixel_coord[1]+ybounds[0], 
                                     s=10, marker=(5,2), color='yellow', lw=0.5)
             if r_in and r_out:
                 # draw circular annulus for target RA-Dec
                 ax1.add_patch(Circle((pixel_coord[0]+xbounds[0], pixel_coord[1]+ybounds[0]), 
-                                    radius=r_in, fill=False, color='yellow', lw=0.3))
+                                    radius=r_in, fill=False, color='midnightblue', lw=0.3, alpha=0.8))
                 ax1.add_patch(Circle((pixel_coord[0]+xbounds[0], pixel_coord[1]+ybounds[0]), 
-                                    radius=r_out, fill=False, color='yellow', lw=0.3))
+                                    radius=r_out, fill=False, color='midnightblue', lw=0.3, alpha=0.8))
         # set tick parameters and color bar
         ax1.tick_params(axis='x', labelsize=8)
         ax1.tick_params(axis='y', labelsize=8)
