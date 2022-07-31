@@ -13,6 +13,7 @@ from astropy.table import QTable, vstack
 import astropy.units as u
 
 from skimage.draw import disk
+from sklearn.preprocessing import normalize as sknorm
 from photutils.background import Background2D, SExtractorBackground
 from photutils.segmentation import detect_sources, deblend_sources, SourceCatalog
 from photutils.aperture import CircularAperture, CircularAnnulus, ApertureStats
@@ -20,7 +21,7 @@ from scipy.signal import savgol_filter
 
 import matplotlib.pylab as plt
 from matplotlib.patches import Rectangle, Circle
-from astropy.visualization import ZScaleInterval, PowerStretch
+from astropy.visualization import ZScaleInterval, MinMaxInterval, PowerStretch, LogStretch
 from astropy.visualization.mpl_normalize import ImageNormalize
 
 
@@ -250,28 +251,180 @@ def detect_stars(img, wcs, radius=None, r_in=None, r_out=None, xbounds=None, ybo
 
 
 
-def simple_photometry(directory, cubename, target_coord, radius, 
-                        annulus=False, r_in=None, r_out=None):
+def simple_photometry(directory, cubename, target_coord, radius, annulus=False, r_in=None, r_out=None):
     """
     Simple time-resolved circular aperture/annulus photometry on one RA-Dec. 
     """
-    return
+    # open cube and obtain wcs info
+    hdulist = fits.open(os.path.join(directory, cubename))
+    hdu = hdulist[0]
+    nframes = int(hdu.header['NAXIS3'])
+    exptime = float(hdu.header['EXPTIME']) * u.s
+    dateobs = hdu.header['DATE-OBS'][:-6]
+    wcs = WCS(hdu.header, naxis=2)
+
+    # convert RA-Dec into xy pixel position for target star
+    pixel_coord = wcs.world_to_pixel(SkyCoord(target_coord))
+    position = [(pixel_coord[0], pixel_coord[1])]
+    print('Target star pixel position =', position)
+
+    # define aperture object
+    aperture = CircularAperture(position, r=radius)
+    if annulus == True:
+        # define annulus aperture object
+        annulus_aperture = CircularAnnulus(position, r_in=r_in, r_out=r_out)
+        sigclip = SigmaClip(sigma=3.0, maxiters=10)
+
+    # aperture photometry for frames in cube
+    fluxlist = []
+    for n in range(nframes):
+        # subtract 2D background
+        img = hdu.data[n]
+        skymap = estimate_background(img, mode='2D', visu=False)
+        img -= skymap
+
+        # obtain statistics for each aperture
+        aper_stats = ApertureStats(img, aperture, sigma_clip=None)  
+
+        if annulus == True:
+            assert type(r_in) == float and type(r_out) == float
+            # sigma-clipped median within a circular annulus
+            bkg_stats = ApertureStats(img, annulus_aperture, sigma_clip=sigclip)
+            total_bkg = bkg_stats.median * aper_stats.sum_aper_area.value
+            apersum_bkgsub = aper_stats.sum - total_bkg
+            fluxlist.append(apersum_bkgsub[0])
+            # print('median, total_bkg =', bkg_stats.median, total_bkg)
+        else:
+            fluxlist.append(aper_stats.sum[0])
+    
+    # output astropy TimeSeries object
+    ts = TimeSeries(time_start=dateobs, time_delta=exptime, n_samples=nframes)
+    ts['target_flux'] = fluxlist
+
+    return ts
 
 
-def multithread_photometry(directory, cubename, sky_aperture, radius, 
-                            annulus=False, r_in=None, r_out=None, sky_annulus=None):
+
+def multithread_photometry(directory, cubename, sky_aperture, annulus=False, sky_annulus=None):
     """
     Time-resolved circular aperture/annulus photometry on multiple RA-Dec coordinates.
     Must provide a sky_aperture object containing RA-Decs. 
     """
-    return
+    # open cube and obtain wcs info
+    hdulist = fits.open(os.path.join(directory, cubename))
+    hdu = hdulist[0]
+    nframes = int(hdu.header['NAXIS3'])
+    exptime = float(hdu.header['EXPTIME']) * u.s
+    dateobs = hdu.header['DATE-OBS'][:-6]
+    wcs = WCS(hdu.header, naxis=2)
+
+    # define aperture object by converting from sky to pixel
+    aperture = sky_aperture.to_pixel(wcs)
+    if annulus == True:
+        assert sky_annulus != None
+        # convert sky annulus to pixel
+        annulus_aperture = sky_annulus.to_pixel(wcs)
+        sigclip = SigmaClip(sigma=3.0, maxiters=10)
+    print('aperture =', aperture)
+    print('annulus_aperture =', annulus_aperture)
+
+    # aperture photometry for frames in cube
+    fluxlist = []
+    for n in range(nframes):
+        # subtract 2D background
+        img = hdu.data[n]
+        skymap = estimate_background(img, mode='2D', visu=False)
+        img -= skymap
+
+        # obtain statistics for each aperture
+        aper_stats = ApertureStats(img, aperture, sigma_clip=None)  
+
+        if annulus == True:
+            # sigma-clipped median within a circular annulus
+            bkg_stats = ApertureStats(img, annulus_aperture, sigma_clip=sigclip)
+            total_bkg = bkg_stats.median * aper_stats.sum_aper_area.value
+            apersum_bkgsub = aper_stats.sum - total_bkg
+            fluxlist.append(apersum_bkgsub)
+        else:
+            fluxlist.append(aper_stats.sum)
+    
+    # output astropy TimeSeries object
+    ts = TimeSeries(time_start=dateobs, time_delta=exptime, n_samples=nframes)
+    ts['ref_flux'] = fluxlist
+     
+    return ts
 
 
-def check_ref_lightcurve(ref_flux_table='xxxx.ecsv'):
+
+def quicklook_lightcurve(directory, visu_dir, ref_flux_table='ref_flux.ecsv', 
+                            ylim=[0.85, 1.15], normalize=True):
     """
     Visualize lightcurves for reference stars. 
     """
-    return
+    table = TimeSeries.read(os.path.join(directory, ref_flux_table), time_column='time')
+    # each row of table['ref_flux'] column contains a list of reference flux
+    # table['ref_flux'] is thus a 2d numpy array; we can treat it as an image in all cases
+    # from now on, table['ref_flux'] is refered to 'reference flux map' (RFM)
+    # x axis of RFM = number of reference stars
+    # y axis of RFM = time-dependent flux
+    RFM = table['ref_flux']
+
+    # number of reference stars = width of RFM
+    nref = RFM.shape[1]
+    nrows = 4
+    ncols = nref // nrows
+
+    fig, axes = plt.subplots(nrows=nrows, ncols=ncols, figsize=(28, 20))
+    fig.suptitle('Reference Stars Lightcurves', fontsize=30)
+    for nrow in range(nrows):
+        for ncol in range(ncols):
+            n = nrow * ncols + ncol
+            if normalize == True:
+                norm_nflux = RFM[:, n] / np.median(RFM[:, n])
+                axes[nrow][ncol].set_ylim(ylim)
+                axes[nrow][ncol].scatter(table.time.datetime64, norm_nflux, 
+                                    s=10, marker='x', color='k', linewidth=0.5, 
+                                    label='ref'+str(n+1)+', median≈'+str(int(round(np.median(RFM[:, n]),-2))))
+                smooth_nflux = savgol_filter(norm_nflux, window_length=51, polyorder=1)
+                axes[nrow][ncol].plot(table.time.datetime64, smooth_nflux, 
+                                    markersize=0, marker='.', color='tab:red', linewidth=2)
+            else:
+                axes[nrow][ncol].scatter(table.time.datetime64, RFM[:, n], 
+                                    s=10, marker='x', color='k', linewidth=0.5, label='ref'+str(n+1))
+                smooth_nflux = savgol_filter(RFM[:, n], window_length=51, polyorder=1)
+                axes[nrow][ncol].plot(table.time.datetime64, smooth_nflux, 
+                                    markersize=0, marker='.', color='tab:red', linewidth=2)
+            axes[nrow][ncol].legend(loc='upper left', fontsize=14)
+    plt.tight_layout()
+    plt.savefig(os.path.join(visu_dir, 'reference_stars_lc.pdf'))
+
+
+    spectrum = RFM.transpose()
+    if normalize == True:
+        fig, ax = plt.subplots(nrows=1, ncols=1, figsize=(8, 6))
+        fig.suptitle('Reference Flux Map (RFM)')
+
+        normalized_spectrum = sknorm(spectrum, axis=1)
+        sort_index = np.median(normalized_spectrum, axis=1).argsort()[::-1]
+        sorted_spec = normalized_spectrum[sort_index]
+        sorted_spec = sorted_spec * (1 / np.median(sorted_spec))
+
+        im1 = ax.imshow(sorted_spec, cmap='viridis', aspect='auto', 
+                        interpolation='None', vmin=ylim[0], vmax=ylim[1])
+        fig.colorbar(im1, ax=ax, location='right', aspect=30, pad=0.03, 
+                            label='normalized flux')
+        ax.set_yticks(np.arange(start=0, stop=nref))
+        labels = [str(n+1) for n in sort_index]
+        labels = ['ref'+m for m in labels]
+        ax.set_yticklabels(labels, fontsize=8)
+        ax.set_xlabel('Time', fontsize=10)
+        ax.set_ylabel('reference star number (median flux sorted)')
+
+    plt.tight_layout()
+    plt.savefig(os.path.join(visu_dir, 'RFM_spectrum.png'), dpi=1200)
+
+    return table, RFM
+
 
 
 def differential_photometry(directory, target_flux='target_flux.ecsv', ref_flux='ref_flux.ecsv', reflist=None):
@@ -280,6 +433,7 @@ def differential_photometry(directory, target_flux='target_flux.ecsv', ref_flux=
     Output diff_lc.
     """
     return
+
 
 
 def visualize_lightcurve(directory, diff_lc='diff_lc.ecsv'):
