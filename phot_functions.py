@@ -476,7 +476,6 @@ def LCs_visualizer(directory, visu_dir, mode='simple', ref_flux_table='ref_flux.
     Y = mdates.date2num(table.time.datetime64)
 
     for n in sort_index:
-        print('n=', n)
         # n = reference star number
         norm_nflux = RFM[:, n] / np.median(RFM[:, n])
         smooth_nflux = savgol_filter(norm_nflux, window_length=51, polyorder=1)
