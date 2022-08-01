@@ -27,6 +27,8 @@ import matplotlib.dates as mdates
 from astropy.visualization import ZScaleInterval, MinMaxInterval, PowerStretch, LogStretch
 from astropy.visualization.mpl_normalize import ImageNormalize
 
+from visu_functions import *
+
 
 
 def estimate_background(img, mode='2D', visu=False, visu_dir=None, high_res=False):
@@ -76,7 +78,8 @@ def estimate_background(img, mode='2D', visu=False, visu_dir=None, high_res=Fals
 
 
 
-def detect_stars(img, wcs, radius=None, r_in=None, r_out=None, xbounds=None, ybounds=None, target_coord=None, 
+def detect_stars(img, wcs, detection_threshold=5, radius=None, r_in=None, r_out=None, 
+                    xbounds=None, ybounds=None, target_coord=None, 
                     visu=False, visu_dir=None, high_res=False):
     """
     Detect sources within a bounding box, while masking target RA-Dec.
@@ -122,7 +125,7 @@ def detect_stars(img, wcs, radius=None, r_in=None, r_out=None, xbounds=None, ybo
 
     # define detection threshold and convolve data
     _, _, std = sigma_clipped_stats(img_crop, sigma=3.0)
-    threshold = 3 * std
+    threshold = detection_threshold * std
 
     sigma = 3.0 * gaussian_fwhm_to_sigma  # FWHM = 3.
     kernel = Gaussian2DKernel(sigma, x_size=3, y_size=3)
@@ -395,20 +398,21 @@ def LCs_visualizer(directory, visu_dir, mode='simple', ref_flux_table='ref_flux.
         for ncol in range(ncols):
             # n = reference star number
             n = nrow * ncols + ncol
-            if mode in ['simple', 'full']:
-                # normalize flux for each reference star = normalize RFM by column median
-                norm_nflux = RFM[:, n] / np.median(RFM[:, n])
-                # set the same ylim for all normalized flux plots
-                axes[nrow][ncol].set_ylim(ylim)
-                # scatter normalized flux write original median flux to legend
-                axes[nrow][ncol].scatter(table.time.datetime64, norm_nflux, 
-                                s=10, marker='x', color='k', linewidth=0.5, 
-                                label='ref'+str(n+1)+', median≈'+str(int(round(np.median(RFM[:, n]),-2))))
-                # smooth normalized flux by a Savitzky-Golay rolling mean of deg=1
-                smooth_nflux = savgol_filter(norm_nflux, window_length=51, polyorder=1)
-                # plot smoothed normalized flux curve in red
-                axes[nrow][ncol].plot(table.time.datetime64, smooth_nflux, 
-                                markersize=0, marker='.', color='tab:red', linewidth=2)
+            if n < nrefs:
+                if mode in ['simple', 'full']:
+                    # normalize flux for each reference star = normalize RFM by column median
+                    norm_nflux = RFM[:, n] / np.median(RFM[:, n])
+                    # set the same ylim for all normalized flux plots
+                    axes[nrow][ncol].set_ylim(ylim)
+                    # scatter normalized flux write original median flux to legend
+                    axes[nrow][ncol].scatter(table.time.datetime64, norm_nflux, 
+                                    s=10, marker='x', color='k', linewidth=0.5, 
+                                    label='ref'+str(n+1)+', median≈'+str(int(round(np.median(RFM[:, n]),-2))))
+                    # smooth normalized flux by a Savitzky-Golay rolling mean of deg=1
+                    smooth_nflux = savgol_filter(norm_nflux, window_length=51, polyorder=1)
+                    # plot smoothed normalized flux curve in red
+                    axes[nrow][ncol].plot(table.time.datetime64, smooth_nflux, 
+                                    markersize=0, marker='.', color='tab:red', linewidth=2)
             elif mode == 'raw':
                 # scatter raw flux for each reference star
                 axes[nrow][ncol].scatter(table.time.datetime64, RFM[:, n], 
@@ -471,15 +475,17 @@ def LCs_visualizer(directory, visu_dir, mode='simple', ref_flux_table='ref_flux.
     X = np.arange(start=1, stop=nrefs+1, step=1)
     Y = mdates.date2num(table.time.datetime64)
 
-    for n in range(nrefs):
+    for n in sort_index:
+        print('n=', n)
         # n = reference star number
         norm_nflux = RFM[:, n] / np.median(RFM[:, n])
         smooth_nflux = savgol_filter(norm_nflux, window_length=51, polyorder=1)
-        if n == 0:
-            ax.plot(np.linspace(start=n,stop=n,num=RFM.shape[0]), Y, smooth_nflux, 
+        Xlocator = sort_index.tolist().index(n)
+        if n == sort_index[0]:
+            ax.plot(np.linspace(start=Xlocator,stop=Xlocator,num=RFM.shape[0]), Y, smooth_nflux, 
                 c='red', linewidth=0.8, alpha=0.8, label='Savitzky-Golay smoothing')
         else:
-            ax.plot(np.linspace(start=n,stop=n,num=RFM.shape[0]), Y, smooth_nflux, 
+            ax.plot(np.linspace(start=Xlocator,stop=Xlocator,num=RFM.shape[0]), Y, smooth_nflux, 
                 c='red', linewidth=0.8, alpha=0.8)
     ax.w_yaxis.set_major_locator(MaxNLocator(7))
     ax.w_yaxis.set_major_formatter(mdates.ConciseDateFormatter(ax.w_yaxis.get_major_locator()))
