@@ -60,8 +60,8 @@ for cubename in cubelist:
 
 
 # %%
-table, RFM = quicklook_lightcurve(directory=out_dir, visu_dir='/Users/danny/Desktop', 
-                                    layout=[4,6], normalize=True)
+table, RFM = LCs_visualizer(directory=out_dir, visu_dir='/Users/danny/Desktop', 
+                                    mode='full', layout=[4,6])
 
 
 # %%
