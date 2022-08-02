@@ -19,6 +19,7 @@ from photutils.segmentation import detect_sources, deblend_sources, SourceCatalo
 from photutils.aperture import CircularAperture, CircularAnnulus, ApertureStats
 from scipy.signal import savgol_filter
 
+import mpld3
 import matplotlib.pylab as plt
 from matplotlib.patches import Rectangle, Circle
 from matplotlib.ticker import MaxNLocator
@@ -79,7 +80,7 @@ def estimate_background(img, mode='2D', visu=False, visu_dir=None, high_res=Fals
 
 
 def detect_stars(img, wcs, detection_threshold=5, radius=None, r_in=None, r_out=None, 
-                    xbounds=None, ybounds=None, target_coord=None, 
+                    xbounds=None, ybounds=None, mask_coord=None, 
                     visu=False, visu_dir=None, high_res=False):
     """
     Detect sources within a bounding box, while masking target RA-Dec.
@@ -88,7 +89,7 @@ def detect_stars(img, wcs, detection_threshold=5, radius=None, r_in=None, r_out=
     img: 2D numpy data array
     xbounds: bounding box [xmin, xmax] pixel positions
     ybounds: bounding box [ymin, ymax] pixel positions
-    target_coord: target RA-Dec position to create circular aperture mask of r=15
+    mask_coord: target RA-Dec position to create circular aperture mask of r=15
     visu==True: visualize source detection and skymap estimation
     """
     if not radius:
@@ -111,11 +112,11 @@ def detect_stars(img, wcs, detection_threshold=5, radius=None, r_in=None, r_out=
     else:
         img_crop = img
 
-    if target_coord:
+    if mask_coord:
         # create circular aperture mask of r=30 pix around target RA-Dec
         # create mask=False for all pixel, then mask=True for target aperture
         # https://scikit-image.org/docs/stable/api/skimage.draw.html?highlight=disk#skimage.draw.disk
-        pixel_coord = wcs.world_to_pixel(SkyCoord(target_coord))
+        pixel_coord = wcs.world_to_pixel(SkyCoord(mask_coord))
         mask = np.zeros(img_crop.shape, dtype=bool)
         rr, cc = disk(center=(pixel_coord[1], pixel_coord[0]), radius=30)
         mask[rr, cc] = True
@@ -177,7 +178,7 @@ def detect_stars(img, wcs, detection_threshold=5, radius=None, r_in=None, r_out=
         # show im0 (background image) in grey scale
         im0 = ax1.imshow(img, cmap='Greys', origin='lower', norm=norm)
         # define bounding box for im1 (image in front) and show im1 using colored cmap
-        extent = [xbounds[0]+2, xbounds[1]+2, ybounds[0]+2, ybounds[1]+2]
+        extent = [xbounds[0]+2, xbounds[1]+2, ybounds[0]-0.5, ybounds[1]-0.5]
         im1 = ax1.imshow(img_crop, cmap='RdYlBu_r', origin='lower', extent=extent, norm=norm)
         # scatter xy-centroid positions of detected sources
         ax1.scatter(table['xcentroid']+xbounds[0], table['ycentroid']+ybounds[0], 
@@ -199,7 +200,7 @@ def detect_stars(img, wcs, detection_threshold=5, radius=None, r_in=None, r_out=
                 # draw circular annulus for detected sources
                 ax1.add_patch(Circle((cenx, ceny), radius=r_in, fill=False, color='red', lw=0.3, alpha=0.8))
                 ax1.add_patch(Circle((cenx, ceny), radius=r_out, fill=False, color='red', lw=0.3, alpha=0.8))
-        if target_coord:
+        if mask_coord:
             # draw circular aperture for target RA-Dec
             ax1.add_patch(Circle((pixel_coord[0]+xbounds[0], pixel_coord[1]+ybounds[0]), 
                                     radius=radius, fill=False, color='fuchsia', lw=0.3))
@@ -247,6 +248,7 @@ def detect_stars(img, wcs, detection_threshold=5, radius=None, r_in=None, r_out=
         plt.tight_layout()
         if high_res == True:
             plt.savefig(os.path.join(visu_dir, 'source_detection.pdf'), dpi=1200)
+            
         else:
             plt.savefig(os.path.join(visu_dir, 'source_detection.pdf'))
         plt.show()
@@ -429,6 +431,7 @@ def LCs_visualizer(directory, visu_dir, mode='simple', ref_flux_table='ref_flux.
             axes[nrow][ncol].xaxis.set_major_formatter(
                                     mdates.ConciseDateFormatter(axes[nrow][ncol].xaxis.get_major_locator()))
     plt.savefig(os.path.join(visu_dir, 'reference_stars_lc.pdf'))
+    mpld3.save_html(fig, os.path.join(visu_dir, 'reference_stars_lc.html'))
     plt.close()
 
 
