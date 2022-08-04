@@ -16,24 +16,27 @@ out_dir = '/Users/danny/Mirror/ASTRO/JPL_NEO/Contact_Binary/data/CSS_034852/2022
 
 
 # %%
-hdulist = fits.open(os.path.join(directory, cubelist[0]))
+hdulist = fits.open(os.path.join(directory, cubelist[5]))
 hdu = hdulist[0]
 img = hdu.data[0]
 wcs = WCS(hdu.header, naxis=2)
 
-sky_aperture, sky_annulus = detect_stars(img, wcs, radius=15.0, r_in=30.0, r_out=45.0, 
-                                        xbounds=[50,1450], ybounds=[50,1450], 
-                                        target_coord='16h38m19.65s +03d48m52.0s', 
-                                        visu=False, visu_dir='/Users/danny/Desktop', high_res=True)
+sky_aperture, sky_annulus = detect_stars(img, wcs, detection_threshold=5, 
+                                    radius=15.0, r_in=30.0, r_out=45.0, 
+                                    xbounds=[150,1250], ybounds=[150,1400], 
+                                    mask_coord='16h38m19.65s +03d48m52.0s', 
+                                    visu=False, visu_dir='/Users/danny/Desktop', high_res=True)
 
 
 # %%
+tablename = os.path.join(out_dir, 'target_flux.ecsv')
+assert os.path.exists(tablename) == False
+
 for cubename in cubelist:
     target_ts = simple_photometry(directory, cubename, 
                 target_coord='16h38m19.65s +03d48m52.0s', 
                 radius=15.0, annulus=True, r_in=30.0, r_out=45.0)
 
-    tablename = os.path.join(out_dir, 'target_flux.ecsv')
     if not os.path.exists(tablename):
         # write ts table to ecsv
         target_ts.write(tablename, overwrite=False)
@@ -44,12 +47,14 @@ for cubename in cubelist:
 
 
 # %%
+tablename = os.path.join(out_dir, 'ref_flux.ecsv')
+assert os.path.exists(tablename) == False
+
 for cubename in cubelist:
     ref_ts = multithread_photometry(directory, cubename, 
                 sky_aperture=sky_aperture, 
                 annulus=True, sky_annulus=sky_annulus)
 
-    tablename = os.path.join(out_dir, 'ref_flux.ecsv')
     if not os.path.exists(tablename):
         # write ts table to ecsv
         ref_ts.write(tablename, overwrite=False)
