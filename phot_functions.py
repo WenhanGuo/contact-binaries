@@ -50,9 +50,9 @@ def estimate_background(img, mode='2D', visu=False, visu_dir=None, high_res=Fals
 
 
 
-def detect_stars(img, wcs, detection_threshold=5, radius=None, r_in=None, r_out=None, 
-                    xbounds=None, ybounds=None, mask_coord=None, 
-                    visu=False, visu_dir=None, high_res=False):
+def detect_stars(img, wcs, detection_threshold=5, radius=None, annulus=False, r_in=None, r_out=None, 
+                                                        xbounds=None, ybounds=None, mask_coord=None, 
+                                                        visu=False, visu_dir=None, high_res=False):
     """
     Detect sources within a bounding box, while masking target RA-Dec.
     Return a list of centroid RA-Decs of detected sources.
@@ -161,15 +161,47 @@ def detect_stars(img, wcs, detection_threshold=5, radius=None, r_in=None, r_out=
     positions = []
     for n in range(len(table)):
         positions.append((table[n]['xcentroid'], table[n]['ycentroid']))
+        
+    if annulus == False:
+        sky_aperture = sky_aperture_from_pix(wcs=wcs, positions=positions, radius=radius, 
+                            annulus=False, r_in=r_in, r_out=r_out)
+        return sky_aperture
+
+    elif annulus == True:
+        sky_aperture, sky_annulus = sky_aperture_from_pix(wcs=wcs, positions=positions, radius=radius, 
+                            annulus=True, r_in=r_in, r_out=r_out)
+        return sky_aperture, sky_annulus
+
+                        
+
+def sky_aperture_from_pix(wcs, positions, radius, annulus=False, r_in=None, r_out=None):
     aperture = CircularAperture(positions, r=radius)
     sky_aperture = aperture.to_sky(wcs)
-    if r_in == None or r_out == None:
-        return sky_aperture
-    else:
+    if annulus == True:
+        assert type(r_in) == float and type(r_out) == float
         annulus_aperture = CircularAnnulus(positions, r_in=r_in, r_out=r_out)
         sky_annulus = annulus_aperture.to_sky(wcs)
+        return sky_aperture, sky_annulus
+    elif annulus == False:
+        return sky_aperture
 
-    return sky_aperture, sky_annulus
+
+
+def sky_aperture_from_RADec(wcs, RA_Dec, radius, annulus=True, r_in=None, r_out=None):
+    # convert RA-Dec into xy pixel position for target star
+    pixel_coord = wcs.world_to_pixel(SkyCoord(RA_Dec))
+    position = [(pixel_coord[0], pixel_coord[1])]
+    # define aperture object
+    aperture = CircularAperture(position, r=radius)
+    sky_aperture = aperture.to_sky(wcs)
+    if annulus == True:
+        assert type(r_in) == float and type(r_out) == float
+        # define annulus aperture object
+        annulus_aperture = CircularAnnulus(position, r_in=r_in, r_out=r_out)
+        sky_annulus = annulus_aperture.to_sky(wcs)
+        return sky_aperture, sky_annulus
+    elif annulus == False:
+        return sky_aperture
 
 
 
@@ -227,7 +259,7 @@ def simple_photometry(directory, cubename, target_coord, radius, annulus=False, 
 
 
 
-def multithread_photometry(directory, cubename, sky_aperture, annulus=False, sky_annulus=None):
+def parallel_photometry(directory, cubename, sky_aperture, annulus=False, sky_annulus=None):
     """
     Time-resolved circular aperture/annulus photometry on multiple RA-Dec coordinates.
     Must provide a sky_aperture object containing RA-Decs. 
@@ -275,6 +307,19 @@ def multithread_photometry(directory, cubename, sky_aperture, annulus=False, sky
     ts['ref_flux'] = fluxlist
      
     return ts
+
+
+
+def dual_thread_photometry(directory, cubename, target_sky_aperture, ref_sky_aperture,
+                            annulus=False, target_sky_annulus=None, ref_sky_annulus=None):
+    """
+    Combining simple_photometry and parallel_photometry. 
+    Time-resolved circular aperture/annulus photometry on target star and reference stars,
+    While avoiding opening FITS cubes twice.
+    Must provide target RA-Dec and ref star sky_aperture object.
+    """
+
+
 
 
 
