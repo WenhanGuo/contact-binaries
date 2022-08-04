@@ -54,26 +54,7 @@ def estimate_background(img, mode='2D', visu=False, visu_dir=None, high_res=Fals
     
     # visualize estimated skymap
     if visu == True:
-        assert type(visu_dir) == str
-        fig, axes = plt.subplots(nrows=1, ncols=3, figsize=(20,8))
-        
-        axes[0].set_title('Original Image')
-        im1 = axes[0].imshow(img, cmap='RdYlBu_r', origin='lower', vmin=0, vmax=500)
-        fig.colorbar(im1, ax=axes[0], location='bottom', pad=0.1)
-
-        axes[1].set_title('Skymap Estimation')
-        im2 = axes[1].imshow(bkg.background, cmap='RdYlBu_r', origin='lower')
-        fig.colorbar(im2, ax=axes[1], location='bottom', pad=0.1)
-
-        axes[2].set_title('Background Subtracted Image')
-        im3 = axes[2].imshow(img - bkg.background, cmap='RdYlBu_r', origin='lower', vmin=0, vmax=500)
-        fig.colorbar(im3, ax=axes[2], location='bottom', pad=0.1)
-
-        if high_res == True:
-            plt.savefig(os.path.join(visu_dir, 'skymap_visualization.pdf'), dpi=1200)
-        else: 
-            plt.savefig(os.path.join(visu_dir, 'skymap_visualization.pdf'))
-        plt.show()
+        visualize_background(img, skymap=bkg.background, visu_dir=visu_dir, high_res=high_res)
 
     return bkg.background
 
@@ -87,59 +68,83 @@ def detect_stars(img, wcs, detection_threshold=5, radius=None, r_in=None, r_out=
     Return a list of centroid RA-Decs of detected sources.
 
     img: 2D numpy data array
-    xbounds: bounding box [xmin, xmax] pixel positions
-    ybounds: bounding box [ymin, ymax] pixel positions
-    mask_coord: target RA-Dec position to create circular aperture mask of r=15
+    wcs: WCS header of cube
+    detection_threshold: number of std above background to qualify as a star
+    radius: aperture photometry radius
+    r_in: annulus photometry inner radius
+    r_out: annulus photometry outer radius
+    xbounds: horizontal bounding box [xmin, xmax] pixel positions
+    ybounds: vertical bounding box [ymin, ymax] pixel positions
+    mask_coord: target RA-Dec position to create circular aperture mask of r=30; exclude from detection
     visu==True: visualize source detection and skymap estimation
+    visu_dir: directory to save visualization results
+    high_res: if want to save high resolution results; takes longer time
     """
     if not radius:
         radius = 15
 
     # subtract 2D background
+    # ----------------------
     skymap = estimate_background(img, mode='2D', visu=False)
     img -= skymap
 
+    # create bounding box mask and source mask
+    # ----------------------------------------
+    assert type(xbounds) == type(ybounds)
+    # create bounding box mask
     if xbounds and ybounds:
-        # create image cutout according to pixel bounding box
-        # note that Cutout2D takes position=(x,y) but size=(ny,nx)
-        # https://docs.astropy.org/en/stable/nddata/utils.html#saving-a-2d-cutout-to-a-fits-file-with-an-updated-wcs
-        cutout_center = ((xbounds[0]+xbounds[1])/2, (ybounds[0]+ybounds[1])/2)
-        cutout_size = u.Quantity((ybounds[1]-ybounds[0], xbounds[1]-xbounds[0]), u.pixel)
-        cutout = Cutout2D(img, position=cutout_center, size=cutout_size, wcs=wcs)
-        img_crop = cutout.data
-        # update wcs
-        wcs = cutout.wcs
+        # create mask=True for all pixel, then mask=False for region within bounding box
+        img_mask = ~np.zeros(img.shape, dtype=bool)
+        img_mask[ybounds[0]:ybounds[1]+1, xbounds[0]:xbounds[1]+1] = False
     else:
-        img_crop = img
+        # create null img_mask (img_mask=False for every pixel)
+        img_mask = np.zeros(img.shape, dtype=bool)
+    # create masked image indicating bounding box
+    masked_img = np.ma.array(img, mask=img_mask)
 
+    # create source mask on target coord
     if mask_coord:
-        # create circular aperture mask of r=30 pix around target RA-Dec
+        # circular aperture mask of r=30 pix around target RA-Dec
         # create mask=False for all pixel, then mask=True for target aperture
         # https://scikit-image.org/docs/stable/api/skimage.draw.html?highlight=disk#skimage.draw.disk
         pixel_coord = wcs.world_to_pixel(SkyCoord(mask_coord))
-        mask = np.zeros(img_crop.shape, dtype=bool)
+        source_mask = np.zeros(img.shape, dtype=bool)
         rr, cc = disk(center=(pixel_coord[1], pixel_coord[0]), radius=30)
-        mask[rr, cc] = True
+        source_mask[rr, cc] = True
     else:
-        # create null mask (mask=False for every pixel)
-        mask = np.zeros(img_crop.shape, dtype=bool)
+        # create null source_mask (source_mask=False for every pixel)
+        source_mask = np.zeros(img.shape, dtype=bool)
+        pixel_coord = None
 
-    # define detection threshold and convolve data
-    _, _, std = sigma_clipped_stats(img_crop, sigma=3.0)
+    # combine bounding box mask (img_mask) and source mask to form master mask
+    master_mask = img_mask + source_mask
+
+    # source detection with photutils image segmentation
+    # --------------------------------------------------
+    # define detection threshold
+    _, _, std = sigma_clipped_stats(img, sigma=3.0)
     threshold = detection_threshold * std
 
+    # convolve image prior to segmentation
     sigma = 3.0 * gaussian_fwhm_to_sigma  # FWHM = 3.
     kernel = Gaussian2DKernel(sigma, x_size=3, y_size=3)
-    convolved_img = convolve(img_crop, kernel)
+    convolved_img = convolve(img, kernel)
 
     # npixels: how many connected pixels, each above threshold, should an area have to qualify as a source
     npixels = 10
-    segment_map = detect_sources(convolved_img, threshold, npixels=npixels, mask=mask)
-    # remove sources that partially overlap with 10 pix from border
-    segment_map.remove_border_labels(border_width=10)
+    segment_map = detect_sources(convolved_img, threshold, npixels=npixels, mask=master_mask)
+
+    # generate greyzone_mask: 10 pixels zone within bounding box
+    greyzone_mask = ~np.zeros(img.shape, dtype=bool)
+    greyzone_mask[ybounds[0]+10:ybounds[1]-9, xbounds[0]+10:xbounds[1]-9] = False
+    # remove detected sources in greyzone_mask: edge effect on mask boundary causes centroid inaccuracies
+    segment_map.remove_masked_labels(greyzone_mask, partial_overlap=True, relabel=True)
+
+    # deblend sources
     segm_deblend = deblend_sources(convolved_img, segment_map, npixels=npixels, 
                                     nlevels=32, contrast=0.001)
-    cat = SourceCatalog(img_crop, segm_deblend, convolved_data=convolved_img)
+    # photutils SourceCatalog table for source detection
+    cat = SourceCatalog(img, segm_deblend, convolved_data=convolved_img)
     columns = ['label','xcentroid','ycentroid','fwhm','gini','eccentricity','orientation','kron_flux']
     table = cat.to_table(columns=columns)
 
@@ -153,108 +158,16 @@ def detect_stars(img, wcs, detection_threshold=5, radius=None, r_in=None, r_out=
     table['kron_flux'].info.format = '.0f'
     print(table)
 
-
+    # visualization
+    # ---------------------
     if visu == True:
-        assert type(visu_dir) == str
-        # create grid for subplots
-        fig = plt.figure()
-        ax1 = plt.subplot2grid(shape=(3, 4), loc=(0, 0), colspan=3, rowspan=3)
-        ax2 = plt.subplot2grid(shape=(3, 4), loc=(0, 3), colspan=1, rowspan=1)
-        ax3 = plt.subplot2grid(shape=(3, 4), loc=(1, 3), colspan=1, rowspan=1)
-        ax4 = plt.subplot2grid(shape=(3, 4), loc=(2, 3), colspan=1, rowspan=1)
-        axes = [ax1, ax2, ax3, ax4]
-        for ax in axes[1:]:
-            ax.tick_params(labelbottom=False, labelleft=False)
-
-        plt.suptitle('Background Subtraction and Source Detection', fontsize=12)
-
-        # drawing main source detection plot
-        # ----------------------------------
-        fig.set_figheight(6)
-        fig.set_figwidth(6)
-        ax1.set_title('Source Detection (aperture mask, border rejection)', fontsize=10)
-        # image normalization: interval and stretch
-        norm = ImageNormalize(img, interval=ZScaleInterval(), stretch=PowerStretch(1.5))
-        # show im0 (background image) in grey scale
-        im0 = ax1.imshow(img, cmap='Greys', origin='lower', norm=norm)
-        # define bounding box for im1 (image in front) and show im1 using colored cmap
-        extent = [xbounds[0]+2, xbounds[1]+2, ybounds[0]-0.5, ybounds[1]-0.5]
-        im1 = ax1.imshow(img_crop, cmap='RdYlBu_r', origin='lower', extent=extent, norm=norm)
-        # scatter xy-centroid positions of detected sources
-        ax1.scatter(table['xcentroid']+xbounds[0], table['ycentroid']+ybounds[0], 
-                    s=10, marker='+', color='lime', linewidth=0.5)
-        # draw bounding box
-        ax1.add_patch(Rectangle((xbounds[0], ybounds[0]), xbounds[1]-xbounds[0], ybounds[1]-ybounds[0],
-                                linestyle = 'dashed', edgecolor = 'black', 
-                                fill=False, lw=0.3))
-        # draw circular apertures for detected sources
-        for n in range(len(table)):
-            # define center pixel positions (cenx, ceny) and draw circles around each center
-            cenx = table[n]['xcentroid']+xbounds[0]
-            ceny = table[n]['ycentroid']+ybounds[0]
-            circle = Circle((cenx, ceny), radius=radius, fill=False, color='white', lw=0.3)
-            ax1.add_patch(circle)
-            # annotate reference star number next to detection circles
-            ax1.annotate(str(n+1), (cenx+25, ceny-30), color='black', fontsize=5, ha='center', va='center')
-            if r_in and r_out:
-                # draw circular annulus for detected sources
-                ax1.add_patch(Circle((cenx, ceny), radius=r_in, fill=False, color='red', lw=0.3, alpha=0.8))
-                ax1.add_patch(Circle((cenx, ceny), radius=r_out, fill=False, color='red', lw=0.3, alpha=0.8))
-        if mask_coord:
-            # draw circular aperture for target RA-Dec
-            ax1.add_patch(Circle((pixel_coord[0]+xbounds[0], pixel_coord[1]+ybounds[0]), 
-                                    radius=radius, fill=False, color='fuchsia', lw=0.3))
-            ax1.scatter(pixel_coord[0]+xbounds[0], pixel_coord[1]+ybounds[0], 
-                                    s=10, marker=(5,2), color='yellow', lw=0.5)
-            if r_in and r_out:
-                # draw circular annulus for target RA-Dec
-                ax1.add_patch(Circle((pixel_coord[0]+xbounds[0], pixel_coord[1]+ybounds[0]), 
-                                    radius=r_in, fill=False, color='midnightblue', lw=0.3, alpha=0.8))
-                ax1.add_patch(Circle((pixel_coord[0]+xbounds[0], pixel_coord[1]+ybounds[0]), 
-                                    radius=r_out, fill=False, color='midnightblue', lw=0.3, alpha=0.8))
-        # set tick parameters and color bar
-        ax1.tick_params(axis='x', labelsize=8)
-        ax1.tick_params(axis='y', labelsize=8)
-        cbar1 = fig.colorbar(im1, ax=ax1, location='left', aspect=30)
-        cbar1.ax.tick_params(labelsize=8)
-
-        # plot original image with interval=[0,500]
-        # -----------------------------------------
-        fig.set_figheight(6)
-        fig.set_figwidth(9)
-        ax2.set_title('Original Image', fontsize=8)
-        im2 = ax2.imshow(img + skymap, cmap='RdYlBu_r', origin='lower', vmin=0, vmax=500)
-        # draw colorbar
-        cbar2 = fig.colorbar(im2, ax=ax2, location='right')
-        cbar2.ax.tick_params(labelsize=6)
-
-        # plot background subtracted image with interval=[0,500]
-        # ------------------------------------------------------
-        ax3.set_title('Background Subtracted Image', fontsize=8)
-        im3 = ax3.imshow(img, cmap='RdYlBu_r', origin='lower', vmin=0, vmax=500)
-        # draw colorbar
-        cbar3 = fig.colorbar(im3, ax=ax3, location='right')
-        cbar3.ax.tick_params(labelsize=6)
-
-        # plot skymap estimation from original image
-        # ------------------------------------------
-        ax4.set_title('Skymap Estimation', fontsize=8)
-        im4 = ax4.imshow(skymap, cmap='RdYlBu_r', origin='lower')
-        # draw colorbar
-        cbar4 = fig.colorbar(im4, ax=ax4, location='right')
-        cbar4.ax.tick_params(labelsize=6)
-
-        # tight layout and output pdf
-        plt.tight_layout()
-        if high_res == True:
-            plt.savefig(os.path.join(visu_dir, 'source_detection.pdf'), dpi=1200)
-            
-        else:
-            plt.savefig(os.path.join(visu_dir, 'source_detection.pdf'))
-        plt.show()
-
+        visualize_detection(img=img, masked_img=masked_img, skymap=skymap, table=table, 
+                            radius=radius, r_in=r_in, r_out=r_out, 
+                            xbounds=xbounds, ybounds=ybounds, pixel_coord=pixel_coord, 
+                            visu_dir=visu_dir, high_res=high_res)
 
     # create sky_aperture object and sky_annulus object
+    # -------------------------------------------------
     positions = []
     for n in range(len(table)):
         positions.append((table[n]['xcentroid'], table[n]['ycentroid']))
