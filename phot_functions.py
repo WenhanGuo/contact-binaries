@@ -318,8 +318,64 @@ def dual_thread_photometry(directory, cubename, target_sky_aperture, ref_sky_ape
     While avoiding opening FITS cubes twice.
     Must provide target RA-Dec and ref star sky_aperture object.
     """
+    # open cube and obtain wcs info
+    hdulist = fits.open(os.path.join(directory, cubename))
+    hdu = hdulist[0]
+    nframes = int(hdu.header['NAXIS3'])
+    exptime = float(hdu.header['EXPTIME']) * u.s
+    dateobs = hdu.header['DATE-OBS'][:-6]
+    wcs = WCS(hdu.header, naxis=2)
 
+    # define target aperture object by converting from sky to pixel
+    target_aperture = target_sky_aperture.to_pixel(wcs)
+    ref_aperture = ref_sky_aperture.to_pixel(wcs)
+    if annulus == True:
+        assert target_sky_annulus != None and ref_sky_annulus != None
+        # convert sky annulus to pixel
+        target_annulus_aperture = target_sky_annulus.to_pixel(wcs)
+        ref_annulus_aperture = ref_sky_annulus.to_pixel(wcs)
+        sigclip = SigmaClip(sigma=3.0, maxiters=10)
+    print('target aperture =', target_aperture)
+    print('target annulus =', target_annulus_aperture)
+    print('ref star aperture len =', len(ref_aperture))
+    print('ref star annulus len =', len(ref_annulus_aperture))
 
+    # aperture photometry for frames in cube
+    target_fluxlist = []
+    ref_fluxlist = []
+    for n in range(nframes):
+        # subtract 2D background
+        img = hdu.data[n]
+        skymap = estimate_background(img, mode='2D', visu=False)
+        img -= skymap
+
+        # obtain statistics for each aperture
+        target_aper_stats = ApertureStats(img, target_aperture, sigma_clip=None)
+        ref_aper_stats = ApertureStats(img, ref_aperture, sigma_clip=None)
+
+        if annulus == True:
+            # sigma-clipped median within a circular annulus
+            target_bkg_stats = ApertureStats(img, target_annulus_aperture, sigma_clip=sigclip)
+            target_total_bkg = target_bkg_stats.median * target_aper_stats.sum_aper_area.value
+            target_apersum_bkgsub = target_aper_stats.sum - target_total_bkg
+            target_fluxlist.append(target_apersum_bkgsub)
+
+            ref_bkg_stats = ApertureStats(img, ref_annulus_aperture, sigma_clip=sigclip)
+            ref_total_bkg = ref_bkg_stats.median * ref_aper_stats.sum_aper_area.value
+            ref_apersum_bkgsub = ref_aper_stats.sum - ref_total_bkg
+            ref_fluxlist.append(ref_apersum_bkgsub)
+        else:
+            target_fluxlist.append(target_aper_stats.sum)
+            ref_fluxlist.append(ref_aper_stats.sum)
+
+    # output astropy TimeSeries object
+    target_ts = TimeSeries(time_start=dateobs, time_delta=exptime, n_samples=nframes)
+    target_ts['target_flux'] = target_fluxlist
+    
+    ref_ts = TimeSeries(time_start=dateobs, time_delta=exptime, n_samples=nframes)
+    ref_ts['ref_flux'] = ref_fluxlist
+     
+    return target_ts, ref_ts
 
 
 
