@@ -16,57 +16,59 @@ out_dir = '/Users/danny/Mirror/ASTRO/JPL_NEO/Contact_Binary/data/CSS_034852/2022
 
 
 # %%
-hdulist = fits.open(os.path.join(directory, cubelist[5]))
+hdulist = fits.open(os.path.join(directory, cubelist[0]))
 hdu = hdulist[0]
 img = hdu.data[0]
 wcs = WCS(hdu.header, naxis=2)
 
-sky_aperture, sky_annulus = detect_stars(img, wcs, detection_threshold=5, 
-                                    radius=15.0, r_in=30.0, r_out=45.0, 
-                                    xbounds=[150,1250], ybounds=[150,1400], 
-                                    mask_coord='16h38m19.65s +03d48m52.0s', 
+RA_Dec = '16h38m19.65s +03d48m52.0s'
+target_sky_aperture, target_sky_annulus = sky_aperture_from_RADec(wcs=wcs, RA_Dec=RA_Dec, 
+                                    radius=15.0, annulus=True, r_in=30.0, r_out=45.0)
+
+ref_sky_aperture, ref_sky_annulus = detect_stars(img, wcs, detection_threshold=5, 
+                                    radius=15.0, annulus=True, r_in=30.0, r_out=45.0, 
+                                    xbounds=[100,1250], ybounds=[150,1400], 
+                                    mask_coord=RA_Dec, 
                                     visu=False, visu_dir='/Users/danny/Desktop', high_res=True)
 
 
 # %%
-tablename = os.path.join(out_dir, 'target_flux.ecsv')
-assert os.path.exists(tablename) == False
+target_tablename = os.path.join(out_dir, 'target_flux.ecsv')
+ref_tablename = os.path.join(out_dir, 'ref_flux.ecsv')
+
+assert os.path.exists(target_tablename) == False
+assert os.path.exists(ref_tablename) == False
 
 for cubename in cubelist:
-    target_ts = simple_photometry(directory, cubename, 
-                target_coord='16h38m19.65s +03d48m52.0s', 
-                radius=15.0, annulus=True, r_in=30.0, r_out=45.0)
+    print('\n---------------------------------------------')
+    print('Performing photometry on', cubelist.index(cubename)+1, 'th cube')
+    print('---------------------------------------------')
 
-    if not os.path.exists(tablename):
-        # write ts table to ecsv
-        target_ts.write(tablename, overwrite=False)
+    target_ts, ref_ts = dual_thread_photometry(directory=directory, cubename=cubename,
+        target_sky_aperture=target_sky_aperture, ref_sky_aperture=ref_sky_aperture, 
+        annulus=True, target_sky_annulus=target_sky_annulus, ref_sky_annulus=ref_sky_annulus)
+
+    if not os.path.exists(target_tablename):
+        # write target ts table to ecsv
+        target_ts.write(target_tablename, overwrite=False)
     else:
-        existing_target_ts = TimeSeries.read(tablename, time_column='time')
+        existing_target_ts = TimeSeries.read(target_tablename, time_column='time')
         new_target_ts = vstack([existing_target_ts, target_ts])
-        new_target_ts.write(tablename, overwrite=True)
-
-
-# %%
-tablename = os.path.join(out_dir, 'ref_flux.ecsv')
-assert os.path.exists(tablename) == False
-
-for cubename in cubelist:
-    ref_ts = multithread_photometry(directory, cubename, 
-                sky_aperture=sky_aperture, 
-                annulus=True, sky_annulus=sky_annulus)
-
-    if not os.path.exists(tablename):
-        # write ts table to ecsv
-        ref_ts.write(tablename, overwrite=False)
+        new_target_ts.write(target_tablename, overwrite=True)
+    
+    if not os.path.exists(ref_tablename):
+        # write ref ts table to ecsv
+        ref_ts.write(ref_tablename, overwrite=False)
     else:
-        existing_ref_ts = TimeSeries.read(tablename, time_column='time')
+        existing_ref_ts = TimeSeries.read(ref_tablename, time_column='time')
         new_ref_ts = vstack([existing_ref_ts, ref_ts])
-        new_ref_ts.write(tablename, overwrite=True)
+        new_ref_ts.write(ref_tablename, overwrite=True)
+
 
 
 # %%
 table, RFM = LCs_visualizer(directory=out_dir, visu_dir='/Users/danny/Desktop', 
-                                    mode='full', layout=[4,6])
+                                    mode='full', layout=[4,4])
 
 
 # %%
