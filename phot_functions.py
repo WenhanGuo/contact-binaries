@@ -358,20 +358,20 @@ def dual_thread_photometry(directory, cubename, target_sky_aperture, ref_sky_ape
             target_bkg_stats = ApertureStats(img, target_annulus_aperture, sigma_clip=sigclip)
             target_total_bkg = target_bkg_stats.median * target_aper_stats.sum_aper_area.value
             target_apersum_bkgsub = target_aper_stats.sum - target_total_bkg
-            target_fluxlist.append(target_apersum_bkgsub)
+            target_fluxlist.append(target_apersum_bkgsub[0])
 
             ref_bkg_stats = ApertureStats(img, ref_annulus_aperture, sigma_clip=sigclip)
             ref_total_bkg = ref_bkg_stats.median * ref_aper_stats.sum_aper_area.value
             ref_apersum_bkgsub = ref_aper_stats.sum - ref_total_bkg
             ref_fluxlist.append(ref_apersum_bkgsub)
         else:
-            target_fluxlist.append(target_aper_stats.sum)
+            target_fluxlist.append(target_aper_stats.sum[0])
             ref_fluxlist.append(ref_aper_stats.sum)
 
     # output astropy TimeSeries object
     target_ts = TimeSeries(time_start=dateobs, time_delta=exptime, n_samples=nframes)
     target_ts['target_flux'] = target_fluxlist
-    
+
     ref_ts = TimeSeries(time_start=dateobs, time_delta=exptime, n_samples=nframes)
     ref_ts['ref_flux'] = ref_fluxlist
      
@@ -379,14 +379,14 @@ def dual_thread_photometry(directory, cubename, target_sky_aperture, ref_sky_ape
 
 
 
-def LCs_visualizer(directory, visu_dir, mode='simple', ref_flux_table='ref_flux.ecsv', 
+def LCs_visualizer(directory, visu_dir, mode='simple', ref_flux='ref_flux.ecsv', 
                             ylim=[0.85, 1.15], layout=[4, 6]):
     """
     Visualize lightcurves for reference stars. 
     """
     assert mode in ['simple', 'full', 'raw']
 
-    table = TimeSeries.read(os.path.join(directory, ref_flux_table), time_column='time')
+    table = TimeSeries.read(os.path.join(directory, ref_flux), time_column='time')
     # each row of table['ref_flux'] column contains a list of reference flux
     # table['ref_flux'] is thus a 2d numpy array; we can treat it as an image in all cases
     # from now on, table['ref_flux'] is refered to as 'reference flux map' (RFM)
@@ -411,12 +411,40 @@ def LCs_visualizer(directory, visu_dir, mode='simple', ref_flux_table='ref_flux.
 
 
 
-def differential_photometry(directory, target_flux='target_flux.ecsv', ref_flux='ref_flux.ecsv', reflist=None):
+def differential_photometry(directory, reflist, target_flux='target_flux.ecsv', ref_flux='ref_flux.ecsv'):
     """
-    Differential photometry from selected reference stars. 
+    Differential photometry on target star by selected reference stars. 
     Output diff_lc.
     """
-    return
+    # read target_flux, ref_flux; initialize diff_lc table
+    target_table = TimeSeries.read(os.path.join(directory, target_flux), time_column='time')
+    ref_table = TimeSeries.read(os.path.join(directory, ref_flux), time_column='time')
+    diff_lc = target_table
+
+    # get specific columns from ref_table['ref_flux'] according to reflist
+    raw_ref_flux = ref_table['ref_flux'][:, np.array(reflist)-1]
+    diff_lc['raw_ref_flux'] = raw_ref_flux
+
+    # normalize raw ref flux by column (by each ref star)
+    norm_ref_flux = sknorm(raw_ref_flux, axis=0)
+    norm_ref_flux = norm_ref_flux / np.median(norm_ref_flux)
+    diff_lc['norm_ref_flux'] = norm_ref_flux
+    
+    # smooth norm ref flux by column
+    smooth_ref_flux = np.empty((0, len(diff_lc)))
+    for n in range(len(reflist)):
+        norm_nref_flux = diff_lc['norm_ref_flux'][:, n]
+        smooth_nref_flux = savgol_filter(norm_nref_flux, window_length=51, polyorder=1)
+        smooth_ref_flux = np.append(smooth_ref_flux, np.array([smooth_nref_flux]), axis=0)
+    diff_lc['smooth_ref_flux'] = smooth_ref_flux.transpose()
+
+    # mean ref flux column
+    diff_lc['mean_ref_flux'] = np.mean(diff_lc['smooth_ref_flux'], axis=1)
+
+    # differential photometry
+    diff_lc['diff_lc'] = diff_lc['target_flux'] / diff_lc['mean_ref_flux']
+
+    return diff_lc
 
 
 
