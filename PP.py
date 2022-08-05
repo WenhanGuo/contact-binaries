@@ -29,7 +29,7 @@ ref_sky_aperture, ref_sky_annulus = detect_stars(img, wcs, detection_threshold=5
                                     radius=15.0, annulus=True, r_in=30.0, r_out=45.0, 
                                     xbounds=[100,1250], ybounds=[150,1400], 
                                     mask_coord=RA_Dec, 
-                                    visu=False, visu_dir='/Users/danny/Desktop', high_res=True)
+                                    visu=True, visu_dir='/Users/danny/Desktop', high_res=True)
 
 
 # %%
@@ -69,6 +69,15 @@ for cubename in cubelist:
 # %%
 table, RFM = LCs_visualizer(directory=out_dir, visu_dir='/Users/danny/Desktop', 
                                     mode='full', layout=[4,4])
+
+
+# %%
+reflist = [12, 10, 8, 11, 7]
+
+diff_lc_name = os.path.join(out_dir, 'diff_lc.ecsv')
+
+diff_lc = differential_photometry(directory=out_dir, reflist=reflist)
+diff_lc.write(diff_lc_name, overwrite=True)
 
 
 # %%
