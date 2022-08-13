@@ -1,6 +1,7 @@
 # %%
 import os
 import numpy as np
+from glob import glob1
 
 from astropy.io import fits
 from astropy.wcs import WCS
@@ -400,11 +401,13 @@ def LCs_visualizer(directory, visu_dir, mode='simple', ref_flux='ref_flux.ecsv',
     elif mode == 'raw':
         visualize_1D_RFM(table=table, mode='raw', visu_dir=visu_dir, ylim=ylim, layout=layout)
 
-    # 2D and 3D RFM visualization
+    # 2D RFM visualization
+    visualize_2D_RFM(table=table, visu_dir=visu_dir, ylim=ylim)
+
+    # 3D RFM visualization
     if mode in ['simple', 'raw']:
         visualize_3D_RFM(table=table, mode='simple', visu_dir=visu_dir, ylim=ylim)
     elif mode == 'full':
-        visualize_2D_RFM(table=table, visu_dir=visu_dir, ylim=ylim)
         visualize_3D_RFM(table=table, mode='full scatter', visu_dir=visu_dir, ylim=ylim)
 
     return table, RFM
@@ -442,17 +445,30 @@ def differential_photometry(directory, reflist, target_flux='target_flux.ecsv', 
     diff_lc['mean_ref_flux'] = np.mean(diff_lc['smooth_ref_flux'], axis=1)
 
     # differential photometry
-    diff_lc['diff_lc'] = diff_lc['target_flux'] / diff_lc['mean_ref_flux']
+    diff_lc['diff_flux'] = diff_lc['target_flux'] / diff_lc['mean_ref_flux']
+    diff_lc['norm_diff_flux'] = diff_lc['diff_flux'] / np.median(diff_lc['diff_flux'])
 
     return diff_lc
 
 
 
-def visualize_lightcurve(directory, diff_lc='diff_lc.ecsv'):
+def fold_lc(obj_dir, table='diff_lc.ecsv'):
     """
     Visualize lightcurve from differential photometry. 
     """
-    return
+    date_folders = glob1(obj_dir, '[0-9]*')
+    joined_ts = None
+    for date in date_folders:
+        ts = TimeSeries.read(os.path.join(obj_dir, date, table), time_column='time')
+        # plt.scatter(ts.time.datetime64, ts['diff_flux'], s=2)
+        if joined_ts == None:
+            joined_ts = ts
+        else:
+            joined_ts = vstack([joined_ts, ts])
+    folded_ts = joined_ts.fold(period=0.2053320 * u.day)
+    plt.scatter(folded_ts.time.jd, folded_ts['norm_diff_flux'], 
+                            s=10, marker='x', alpha=1, linewidth=0.5)
+    return joined_ts
 
 
 
