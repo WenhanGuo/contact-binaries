@@ -85,7 +85,7 @@ def solve_and_align(directory, cubename, out_dir):
     """
     Solve the first frame of a 3D cube, align other frames to it.
     Output an aligned WCS cube to out_dir. 
-    Note the wait time for astrometry.net varies greatly with time of day.
+    Note the wait time for astrometry.net varies significantly with time of day.
     """
     # read from 3D cube and obtain its 1st frame for solving and as reference frame
     # IMPORTANT: np.float32 is to reset endian-ness for astroalign, do not modify
@@ -120,13 +120,20 @@ def solve_and_align(directory, cubename, out_dir):
     for n in range(1, nframes):
         img_to_align = cube[n]
         convolved_img_to_align = convolve(img_to_align, kernel, normalize_kernel=True)
-        p, (pos_img, pos_img_rot) = aa.find_transform(convolved_img_to_align, 
+        # try finding alignment transformation p. If failed, no transformation will be applied
+        try: 
+            p, (pos_img, pos_img_rot) = aa.find_transform(convolved_img_to_align, 
                                                         convolved_ref_img, detection_sigma=2.0)
-        aligned_img, footprint = aa.apply_transform(p, img_to_align, ref_img)
-
-        print("\nRotation: {:.2f} degrees".format(p.rotation * 180.0 / np.pi))
-        print("Scale factor: {:.4f}".format(p.scale))
-        print("Translation: (x, y) = ({:.2f}, {:.2f})".format(*p.translation))
+        except:
+            p = None
+            aligned_img = img_to_align
+            print("WARNING: failed to align frame", n, ", no transformation is applied.")
+        
+        if p != None:
+            aligned_img, footprint = aa.apply_transform(p, img_to_align, ref_img)
+            print("\nRotation: {:.2f} degrees".format(p.rotation * 180.0 / np.pi))
+            print("Scale factor: {:.4f}".format(p.scale))
+            print("Translation: (x, y) = ({:.2f}, {:.2f})".format(*p.translation))
 
         aligned_list.append(aligned_img)
         print('current array len =', len(aligned_list))
