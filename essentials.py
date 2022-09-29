@@ -133,33 +133,10 @@ def solve_img(directory, imgname):
     return wcs_header
 
 
-def solve_and_align(directory, cubename, out_dir):
+def align_frames(cube, ref_img, nframes):
     """
-    Solve the first frame of a 3D cube, align other frames to it.
-    Output an aligned WCS cube to out_dir. 
-    Note the wait time for astrometry.net varies significantly with time of day.
+    Align every frame in cube to ref_img.
     """
-    # read from 3D cube and obtain its 1st frame for solving and as reference frame
-    # IMPORTANT: np.float32 is to reset endian-ness for astroalign, do not modify
-    # FITS from fits.writeto has a different endian-ness that is incompatable with astroalign
-    # otherwise will raises ValueError: Big-endian buffer not supported on little-endian compiler
-    # This issue is introduced in new versions of scikit-image that astroalign relies on
-    hdulist = fits.open(os.path.join(directory, cubename))
-    hdu = hdulist[0]
-    cube = np.float32(hdu.data)
-    ref_img = cube[0]
-
-    # obtain essential cards from cube header
-    nframes = int(hdu.header['NAXIS3'])
-    assert nframes == len(cube)
-    exptime = float(hdu.header['EXPTIME'])
-    dateobs = hdu.header['DATE-OBS']
-
-    # write 1st frame of cube to a temporary 2D fits and solve it
-    fits.writeto(os.path.join(directory, 'solve_temporary.fits'), ref_img, header=hdu.header, overwrite=True)
-    wcs_header = solve_img(directory, 'solve_temporary.fits')
-    os.remove(os.path.join(directory, 'solve_temporary.fits'))
-
     # convolve ref_img before astroalign source detection
     # convolved data only used for alignment; original data is used for writing to new cube
     sigma = 3.0 * gaussian_fwhm_to_sigma  # FWHM = 3.
@@ -189,11 +166,46 @@ def solve_and_align(directory, cubename, out_dir):
 
         aligned_list.append(aligned_img)
         print('current array len =', len(aligned_list))
-    
+
     # correct data type for aligned frames
     aligned_array = np.array(aligned_list)
     aligned_array = aligned_array.astype('float32')
     print('final array shape =', aligned_array.shape)
+
+    return aligned_array
+
+
+
+
+def solve_and_align(directory, cubename, out_dir):
+    """
+    Solve the first frame of a 3D cube, align other frames to it.
+    Output an aligned WCS cube to out_dir. 
+    Note the wait time for astrometry.net varies significantly with time of day.
+    """
+    # read from 3D cube and obtain its 1st frame for solving and as reference frame
+    # IMPORTANT: np.float32 is to reset endian-ness for astroalign, do not modify
+    # FITS from fits.writeto has a different endian-ness that is incompatable with astroalign
+    # otherwise will raises ValueError: Big-endian buffer not supported on little-endian compiler
+    # This issue is introduced in new versions of scikit-image that astroalign relies on
+    hdulist = fits.open(os.path.join(directory, cubename))
+    hdu = hdulist[0]
+    cube = np.float32(hdu.data)
+    ref_img = cube[0]
+
+    # obtain essential cards from cube header
+    nframes = int(hdu.header['NAXIS3'])
+    assert nframes == len(cube)
+    exptime = float(hdu.header['EXPTIME'])
+    dateobs = hdu.header['DATE-OBS']
+
+    # write 1st frame of cube to a temporary 2D fits and solve it
+    fits.writeto(os.path.join(directory, 'solve_temporary.fits'), ref_img, header=hdu.header, overwrite=True)
+    wcs_header = solve_img(directory, 'solve_temporary.fits')
+    os.remove(os.path.join(directory, 'solve_temporary.fits'))
+
+    # align frames to ref_img
+    aligned_array = align_frames(cube=cube, ref_img=ref_img, nframes=nframes)
 
     # add essential cards from original header to WCS header; write to WCS fits
     wcs_header.set('EXPTIME', exptime, before='CTYPE1')
