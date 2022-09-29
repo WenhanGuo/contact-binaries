@@ -34,15 +34,54 @@ def avg_cube(directory, cubename, outname):
     return
 
 
-def calibrate_cube(directory, cubename, cali_dir, biasname, darkname, darkexptime, flatname, out_dir):
+def calibrate_flat(cali_dir, flatname, darkname, biasname):
+    """
+    Subtract master_dark and master_bias from master_flat.
+    """
+    # load master calibration frames
+    master_bias = CCDData.read(os.path.join(cali_dir, biasname), unit=u.dimensionless_unscaled)
+    master_dark = CCDData.read(os.path.join(cali_dir, darkname), unit=u.dimensionless_unscaled)
+    master_flat = CCDData.read(os.path.join(cali_dir, flatname), unit=u.dimensionless_unscaled)
+
+    # subtract master_dark and master_bias from master_flat
+    # 10s are dummy variables
+    bias_subtracted = ccdproc.subtract_bias(master_flat, master_bias)
+    dark_subtracted = ccdproc.subtract_dark(bias_subtracted, master_dark, 
+                                                data_exposure=10*u.s, dark_exposure=10*u.s)
+
+    fits.writeto(os.path.join(cali_dir, flatname[:-5]+'_calibrated.fits'), 
+                    dark_subtracted, header=master_flat.header, overwrite=True)
+    
+
+
+def calibrate_cube(directory, cubename, cali_dir, biasname, darkname, darkexptime, 
+        flatname=None, mode='multicolor', Cflat=None, gflat=None, rflat=None, iflat=None, out_dir=None):
     """
     Reduce 3D cube by master dark, bias, flat; output to out_dir.
+    If mode == 'multicolor', must provide CLEAR, g, r, i master flats;
+    If mode == 'monocolor', must provide flatname.
     """
+    assert mode in ['monocolor', 'multicolor']
+
+    if mode == 'multicolor':
+        assert Cflat != None
+        assert gflat != None
+        assert rflat != None
+        assert iflat != None
+    if mode == 'monocolor':
+        assert flatname != None
+
     # load data cube and master calibration frames
     cube = CCDData.read(os.path.join(directory, cubename), unit=u.dimensionless_unscaled)
     master_bias = CCDData.read(os.path.join(cali_dir, biasname), unit=u.dimensionless_unscaled)
     master_dark = CCDData.read(os.path.join(cali_dir, darkname), unit=u.dimensionless_unscaled)
-    master_flat = CCDData.read(os.path.join(cali_dir, flatname), unit=u.dimensionless_unscaled)
+    if mode == 'monocolor':
+        master_flat = CCDData.read(os.path.join(cali_dir, flatname), unit=u.dimensionless_unscaled)
+    elif mode == 'multicolor':
+        master_Cflat = CCDData.read(os.path.join(cali_dir, Cflat), unit=u.dimensionless_unscaled)
+        master_gflat = CCDData.read(os.path.join(cali_dir, gflat), unit=u.dimensionless_unscaled)
+        master_rflat = CCDData.read(os.path.join(cali_dir, rflat), unit=u.dimensionless_unscaled)
+        master_iflat = CCDData.read(os.path.join(cali_dir, iflat), unit=u.dimensionless_unscaled)
 
     # subtract master bias from master dark
     master_dark = ccdproc.subtract_bias(master_dark, master_bias)
@@ -56,7 +95,20 @@ def calibrate_cube(directory, cubename, cali_dir, biasname, darkname, darkexptim
         bias_subtracted = ccdproc.subtract_bias(img, master_bias)
         dark_subtracted = ccdproc.subtract_dark(bias_subtracted, master_dark, 
                                                 data_exposure=exptime*u.s, dark_exposure=darkexptime*u.s)
-        reduced_img = ccdproc.flat_correct(dark_subtracted, master_flat)
+        # flat is normalized within the ccdproc.flat_correct function
+        if mode == 'monocolor':
+            reduced_img = ccdproc.flat_correct(dark_subtracted, master_flat)
+        elif mode == 'multicolor':
+            filt = cube.header['FILTER']
+            assert filt in ['CLEAR', 'g', 'r', 'i']
+            if filt == 'CLEAR':
+                reduced_img = ccdproc.flat_correct(dark_subtracted, master_Cflat)
+            elif filt == 'g':
+                reduced_img = ccdproc.flat_correct(dark_subtracted, master_gflat)
+            elif filt == 'r':
+                reduced_img = ccdproc.flat_correct(dark_subtracted, master_rflat)
+            elif filt == 'i':
+                reduced_img = ccdproc.flat_correct(dark_subtracted, master_iflat)
         reduced_cube.append(reduced_img)
 
     # create 'reduced_cubes' subdirectory
@@ -157,5 +209,4 @@ def solve_and_align(directory, cubename, out_dir):
     return
 
 
-            
 # %%
