@@ -1,6 +1,7 @@
 # %%
 import os
 import numpy as np
+from glob import glob1
 
 from astropy import units as u
 from astropy.nddata import CCDData
@@ -34,28 +35,28 @@ def avg_cube(directory, cubename, outname):
     return
 
 
-def calibrate_flat(cali_dir, flatname, darkname, biasname):
+def calibrate_flat(cali_dir, flatname, darkbiasname):
     """
-    Subtract master_dark and master_bias from master_flat.
+    Subtract dark and bias from flat, normalize.
     """
     # load master calibration frames
-    master_bias = CCDData.read(os.path.join(cali_dir, biasname), unit=u.dimensionless_unscaled)
-    master_dark = CCDData.read(os.path.join(cali_dir, darkname), unit=u.dimensionless_unscaled)
-    master_flat = CCDData.read(os.path.join(cali_dir, flatname), unit=u.dimensionless_unscaled)
+    darkbias = CCDData.read(os.path.join(cali_dir, darkbiasname), unit=u.dimensionless_unscaled)
+    flat = CCDData.read(os.path.join(cali_dir, flatname), unit=u.dimensionless_unscaled)
 
     # subtract master_dark and master_bias from master_flat
     # 10s are dummy variables
-    bias_subtracted = ccdproc.subtract_bias(master_flat, master_bias)
-    dark_subtracted = ccdproc.subtract_dark(bias_subtracted, master_dark, 
+    corrected = ccdproc.subtract_dark(flat, darkbias, 
                                                 data_exposure=10*u.s, dark_exposure=10*u.s)
+    # normalize flat
+    normalized = corrected / np.median(corrected)
 
-    fits.writeto(os.path.join(cali_dir, flatname[:-5]+'_calibrated.fits'), 
-                    dark_subtracted, header=master_flat.header, overwrite=True)
+    fits.writeto(os.path.join(cali_dir, flatname[:-5]+'_norm.fits'), 
+                    normalized, header=flat.header, overwrite=True)
     
 
 
-def calibrate_cube(directory, cubename, cali_dir, biasname, darkname, darkexptime, 
-        flatname=None, mode='multicolor', Cflat=None, gflat=None, rflat=None, iflat=None, out_dir=None):
+def calibrate_cube(directory, cubename, cali_dir, darkbiasname, darkexptime, flatname=None, 
+            mode='multicolor', Cflat=None, gflat=None, rflat=None, iflat=None, out_dir=None):
     """
     Reduce 3D cube by master dark, bias, flat; output to out_dir.
     If mode == 'multicolor', must provide CLEAR, g, r, i master flats;
@@ -73,8 +74,7 @@ def calibrate_cube(directory, cubename, cali_dir, biasname, darkname, darkexptim
 
     # load data cube and master calibration frames
     cube = CCDData.read(os.path.join(directory, cubename), unit=u.dimensionless_unscaled)
-    master_bias = CCDData.read(os.path.join(cali_dir, biasname), unit=u.dimensionless_unscaled)
-    master_dark = CCDData.read(os.path.join(cali_dir, darkname), unit=u.dimensionless_unscaled)
+    darkbias = CCDData.read(os.path.join(cali_dir, darkbiasname), unit=u.dimensionless_unscaled)
     if mode == 'monocolor':
         master_flat = CCDData.read(os.path.join(cali_dir, flatname), unit=u.dimensionless_unscaled)
     elif mode == 'multicolor':
@@ -83,32 +83,28 @@ def calibrate_cube(directory, cubename, cali_dir, biasname, darkname, darkexptim
         master_rflat = CCDData.read(os.path.join(cali_dir, rflat), unit=u.dimensionless_unscaled)
         master_iflat = CCDData.read(os.path.join(cali_dir, iflat), unit=u.dimensionless_unscaled)
 
-    # subtract master bias from master dark
-    master_dark = ccdproc.subtract_bias(master_dark, master_bias)
-
     # subtract bias, dark, divide by flat
     reduced_cube = []
     nframes = int(cube.header['NAXIS3'])
     exptime = float(cube.header['EXPTIME'])
     for n in range(nframes):
         img = cube[n]
-        bias_subtracted = ccdproc.subtract_bias(img, master_bias)
-        dark_subtracted = ccdproc.subtract_dark(bias_subtracted, master_dark, 
-                                                data_exposure=exptime*u.s, dark_exposure=darkexptime*u.s)
+        darkbias_subtracted = ccdproc.subtract_dark(img, darkbias, 
+                                        data_exposure=exptime*u.s, dark_exposure=darkexptime*u.s)
         # flat is normalized within the ccdproc.flat_correct function
         if mode == 'monocolor':
-            reduced_img = ccdproc.flat_correct(dark_subtracted, master_flat)
+            reduced_img = ccdproc.flat_correct(darkbias_subtracted, master_flat)
         elif mode == 'multicolor':
             filt = cube.header['FILTER']
             assert filt in ['CLEAR', 'g', 'r', 'i']
             if filt == 'CLEAR':
-                reduced_img = ccdproc.flat_correct(dark_subtracted, master_Cflat)
+                reduced_img = ccdproc.flat_correct(darkbias_subtracted, master_Cflat)
             elif filt == 'g':
-                reduced_img = ccdproc.flat_correct(dark_subtracted, master_gflat)
+                reduced_img = ccdproc.flat_correct(darkbias_subtracted, master_gflat)
             elif filt == 'r':
-                reduced_img = ccdproc.flat_correct(dark_subtracted, master_rflat)
+                reduced_img = ccdproc.flat_correct(darkbias_subtracted, master_rflat)
             elif filt == 'i':
-                reduced_img = ccdproc.flat_correct(dark_subtracted, master_iflat)
+                reduced_img = ccdproc.flat_correct(darkbias_subtracted, master_iflat)
         reduced_cube.append(reduced_img)
 
     # create 'reduced_cubes' subdirectory
@@ -133,30 +129,41 @@ def solve_img(directory, imgname):
     return wcs_header
 
 
-def align_frames(cube, ref_img, nframes):
+def align_frames(cube, ref_img, nframes, do_convolve=True):
     """
     Align every frame in cube to ref_img.
     """
-    # convolve ref_img before astroalign source detection
-    # convolved data only used for alignment; original data is used for writing to new cube
-    sigma = 3.0 * gaussian_fwhm_to_sigma  # FWHM = 3.
-    kernel = Gaussian2DKernel(sigma, x_size=3, y_size=3)
-    convolved_ref_img = convolve(ref_img, kernel, normalize_kernel=True)
+    if do_convolve == True:
+        # convolve ref_img before astroalign source detection
+        # convolved data only used for alignment; original data is used for writing to new cube
+        sigma = 3.0 * gaussian_fwhm_to_sigma  # FWHM = 3.
+        kernel = Gaussian2DKernel(sigma, x_size=3, y_size=3)
+        convolved_ref_img = convolve(ref_img, kernel, normalize_kernel=True)
 
-    # convolve and align every frame to ref_img and obtain transformation parameters
-    # reproject original frames using transformation parameters
-    aligned_list = [ref_img]
-    for n in range(1, nframes):
-        img_to_align = cube[n]
-        convolved_img_to_align = convolve(img_to_align, kernel, normalize_kernel=True)
-        # try finding alignment transformation p. If failed, no transformation will be applied
-        try: 
-            p, (pos_img, pos_img_rot) = aa.find_transform(convolved_img_to_align, 
-                                                        convolved_ref_img, detection_sigma=2.0)
-        except:
-            p = None
-            aligned_img = img_to_align
-            print("WARNING: failed to align frame", n, ", no transformation is applied.")
+        # convolve and align every frame to ref_img and obtain transformation parameters
+        # reproject original frames using transformation parameters
+        aligned_list = []
+        for n in range(nframes):
+            img_to_align = cube[n]
+            convolved_img_to_align = convolve(img_to_align, kernel, normalize_kernel=True)
+            # try finding alignment transformation p. If failed, no transformation will be applied
+            try: 
+                p, (pos_img, pos_img_rot) = aa.find_transform(convolved_img_to_align, 
+                                                            convolved_ref_img, detection_sigma=1.0)
+            except:
+                p = None
+                aligned_img = img_to_align
+                print("WARNING: failed to align frame", n, ", no transformation is applied.")
+    elif do_convolve == False:
+        aligned_list = []
+        for n in range(nframes):
+            img_to_align = cube[n]
+            try: 
+                p, (pos_img, pos_img_rot) = aa.find_transform(img_to_align, ref_img, detection_sigma=2.0)
+            except:
+                p = None
+                aligned_img = img_to_align
+                print("WARNING: failed to align frame", n, ", no transformation is applied.")
         
         if p != None:
             aligned_img, footprint = aa.apply_transform(p, img_to_align, ref_img)
@@ -177,7 +184,7 @@ def align_frames(cube, ref_img, nframes):
 
 
 
-def solve_and_align(directory, cubename, out_dir):
+def solve_and_align(directory, cubename, out_dir, do_convolve=True):
     """
     Solve the first frame of a 3D cube, align other frames to it.
     Output an aligned WCS cube to out_dir. 
@@ -198,6 +205,7 @@ def solve_and_align(directory, cubename, out_dir):
     assert nframes == len(cube)
     exptime = float(hdu.header['EXPTIME'])
     dateobs = hdu.header['DATE-OBS']
+    filt = hdu.header['FILTER']
 
     # write 1st frame of cube to a temporary 2D fits and solve it
     fits.writeto(os.path.join(directory, 'solve_temporary.fits'), ref_img, header=hdu.header, overwrite=True)
@@ -205,11 +213,12 @@ def solve_and_align(directory, cubename, out_dir):
     os.remove(os.path.join(directory, 'solve_temporary.fits'))
 
     # align frames to ref_img
-    aligned_array = align_frames(cube=cube, ref_img=ref_img, nframes=nframes)
+    aligned_array = align_frames(cube=cube, ref_img=ref_img, nframes=nframes, do_convolve=do_convolve)
 
     # add essential cards from original header to WCS header; write to WCS fits
     wcs_header.set('EXPTIME', exptime, before='CTYPE1')
     wcs_header.set('DATE-OBS', dateobs, before='CTYPE1')
+    wcs_header.set('FILTER', filt, before='CTYPE1')
 
     # create out_dir directory and write WCS cube to it
     if not os.path.exists(out_dir):
@@ -222,3 +231,51 @@ def solve_and_align(directory, cubename, out_dir):
 
 
 # %%
+def batch_solve_and_align(directory, out_dir, do_convolve=True):
+    """
+    Solve and align every cube in folder to ref_img.
+    """
+    cubelist = sorted(glob1(directory, '*.fits'))
+
+    # compact code to set ref_img = 1st frame of 1st cube; equivalent code broken down below
+    ref_img = np.float32(fits.open(os.path.join(directory, cubelist[0]))[0].data)[0]
+    
+    # write ref_img to a temporary 2D fits and solve it
+    fits.writeto(os.path.join(directory, 'solve_temporary.fits'), ref_img, overwrite=True)
+    wcs_header = solve_img(directory, 'solve_temporary.fits')
+    os.remove(os.path.join(directory, 'solve_temporary.fits'))
+
+
+    for cubename in cubelist:
+        # IMPORTANT: np.float32 is to reset endian-ness for astroalign, do not modify
+        # FITS from fits.writeto has a different endian-ness that is incompatable with astroalign
+        # otherwise will raises ValueError: Big-endian buffer not supported on little-endian compiler
+        # This issue is introduced in new versions of scikit-image that astroalign relies on
+        hdulist = fits.open(os.path.join(directory, cubename))
+        hdu = hdulist[0]
+        cube = np.float32(hdu.data)
+
+        # obtain essential cards from cube header
+        nframes = int(hdu.header['NAXIS3'])
+        assert nframes == len(cube)
+        exptime = float(hdu.header['EXPTIME'])
+        dateobs = hdu.header['DATE-OBS']
+        filt = hdu.header['FILTER']
+
+        # align frames to ref_img
+        aligned_array = align_frames(cube=cube, ref_img=ref_img, nframes=nframes, do_convolve=do_convolve)
+
+        # add essential cards from original header to WCS header; write to WCS fits
+        wcs_header.set('EXPTIME', exptime, before='CTYPE1')
+        wcs_header.set('DATE-OBS', dateobs, before='CTYPE1')
+        wcs_header.set('FILTER', filt, before='CTYPE1')
+
+        # create out_dir directory and write WCS cube to it
+        if not os.path.exists(out_dir):
+            print('Created', out_dir)
+            os.mkdir(out_dir)
+        fits.writeto(os.path.join(out_dir, cubename[:-5]+'_aligned.fits'), 
+                        aligned_array, header=wcs_header, overwrite=True)
+
+    return
+
