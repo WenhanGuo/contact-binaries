@@ -5,7 +5,7 @@ from glob import glob1
 
 
 directory = '/Users/danny/Mirror/ASTRO/ASTR101/lab2/data'
-# directory = '/Users/danny/Mirror/ASTRO/Contact_Binary/data/CSS_034852/cgri_test'
+# directory = '/Users/danny/Mirror/ASTRO/Contact_Binary/data/CSS_034852/20220719'
 cali_dir='/Users/danny/Mirror/ASTRO/Calibration/CALIBS_20220921'
 cubelist = sorted(glob1(directory, '*.fits'))
 
@@ -65,6 +65,20 @@ for cubename in cubelist:
 
 
 # %%
+for cubename in cubelist:
+    slice_cube(directory=directory, 
+                cubename=cubename,
+                out_dir=os.path.join(directory, 'sliced'))
+
+# %%
+
+alipy_align(directory=os.path.join(directory, 'sliced'),
+            out_dir=os.path.join(directory, 'aligned'))
+
+
+# %%
+
+# ------------------------------------ LEGACY FUNCTIONS ------------------------------------
 
 """
 reduced_cubelist = sorted(glob1(os.path.join(directory, 'reduced_cubes'), '*_reduced.fits'))
@@ -73,13 +87,8 @@ for cubename in reduced_cubelist:
     solve_and_align(directory=os.path.join(directory, 'reduced_cubes'), 
                     cubename=cubename, 
                     out_dir=os.path.join(directory, 'aligned_cubes'))
-"""
 
-
-# %%
 batch_solve_and_align(directory=os.path.join(directory, 'reduced_cubes'), 
                         out_dir=os.path.join(directory, 'aligned_cubes'),
-                        do_convolve=False)
+                        do_convolve=False)"""
 
-
-# %%
