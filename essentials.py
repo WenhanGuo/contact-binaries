@@ -1,6 +1,7 @@
 # %%
 import os
 import numpy as np
+import glob
 from glob import glob1
 
 from astropy import units as u
@@ -11,6 +12,11 @@ from astropy.convolution import Gaussian2DKernel, convolve
 
 from astroquery.astrometry_net import AstrometryNet
 import astroalign as aa
+import alipy
+
+import sys
+import six
+sys.modules['astropy.extern.six'] = six
 import ccdproc
 from ccdproc import Combiner
 
@@ -121,6 +127,43 @@ def calibrate_cube(directory, cubename, cali_dir, darkbiasname, darkexptime, fla
     return
 
 
+def slice_cube(directory, cubename, out_dir):
+    """
+    Time-increment slicing of FITS cube.
+    If the cube is a Time Series cube, (has date-obs and exptime in header), 
+    increment slices' headers so that their date-obs reflect actual frame exposure time.
+    """
+    # IMPORTANT: np.float32 is to reset endian-ness for astroalign, do not modify
+    # FITS from fits.writeto has a different endian-ness that is incompatable with astroalign
+    # otherwise will raises ValueError: Big-endian buffer not supported on little-endian compiler
+    # This issue is introduced in new versions of scikit-image that astroalign relies on
+    hdulist = fits.open(os.path.join(directory, cubename))
+    hdu = hdulist[0]
+    cube = np.float32(hdu.data)
+
+    # obtain essential cards from cube header
+    nframes = int(hdu.header['NAXIS3'])
+    assert nframes == len(cube)
+    exptime = float(hdu.header['EXPTIME'])
+    dateobs = hdu.header['DATE-OBS']
+
+    for n in range(nframes):
+        img = cube[n]
+        header = hdu.header
+        actual_dateobs = np.datetime64(dateobs) + n * int(exptime)
+        actual_dateobs = str(actual_dateobs)+'+00:00'
+        header.set('DATE-OBS', actual_dateobs)
+        
+        # create out_dir directory and write WCS cube to it
+        if not os.path.exists(out_dir):
+            print('Created', out_dir)
+            os.mkdir(out_dir)
+        fits.writeto(os.path.join(out_dir, cubename[:-5]+'_sliced'+str(n+1)+'.fits'), 
+                    img, header=hdu.header, overwrite=True)
+    
+    return
+
+
 def solve_img(directory, imgname):
     """
     Submit to astrometry.net and solve image, return a WCS header
@@ -129,8 +172,70 @@ def solve_img(directory, imgname):
     return wcs_header
 
 
-def align_frames(cube, ref_img, nframes, do_convolve=True):
+def alipy_align(directory, out_dir, refname=None):
     """
+    Adapted from do_alipy3. 
+    Align 2D images in directory to ref.fits
+    """
+    images_to_align = sorted(glob.glob(os.path.join(directory, '*.fits')))
+    if refname == None:
+        ref_image = os.path.join(directory, images_to_align[0])
+    else:
+        ref_image = os.path.join(directory, refname)
+    print(ref_image)
+
+    identifications = alipy.ident.run(ref_image, images_to_align, visu=False)
+    # Put visu=True to get visualizations in form of png files (nice but much slower)
+    # On multi-extension data, you will want to specify the hdu (see API doc).
+
+    fail = 0
+    # The output is a list of Identification objects, which contain the transforms :
+    for id in identifications: # list of the same length as images_to_align.
+        if id.ok == True: # i.e., if it worked
+            print("%20s : %20s, flux ratio %.2f" % (id.ukn.name, id.trans, id.medfluxratio))
+            # id.trans is a alipy.star.SimpleTransform object. Instead of printing it out as a string,
+            # you can directly access its parameters :
+            #print id.trans.v # the raw data, [r*cos(theta)  r*sin(theta)  r*shift_x  r*shift_y]
+            #print id.trans.matrixform()
+            #print id.trans.inverse() # this returns a new SimpleTransform object
+        else:
+            fail += 1
+            print ("%20s : no transformation found !" % (id.ukn.name))
+
+    outputshape = alipy.align.shape(ref_image)
+    # This is simply a tuple (width, height)... you could specify any other shape.
+
+    for id in identifications:
+        if id.ok == True:
+            # Variant 1, using only scipy and the simple affine transorm :
+            alipy.align.affineremap(id.ukn.filepath, id.trans, shape=outputshape, makepng=True)
+
+            # Variant 2, using geomap/gregister, correcting also for distortions :
+            alipy.align.irafalign(id.ukn.filepath, id.uknmatchstars, id.refmatchstars, 
+                                                    shape=outputshape, makepng=False)
+            # id.uknmatchstars and id.refmatchstars are simply lists of corresponding Star objects.
+
+    # By default, the aligned images are written into a directory "alipy_out".
+    # Move alipy_out to desired output dir.
+    if not os.path.exists(out_dir):
+        print('Created', out_dir)
+        os.mkdir(out_dir)
+    original_path = './alipy_out/'
+    files = os.listdir(original_path)
+    for f in files:
+        os.rename(original_path+f, os.path.join(out_dir,f))
+    
+    print('Failed', fail, 'frames out of', len(identifications), 'frames.')
+    
+    return
+
+    
+
+# ------------------------------------ LEGACY FUNCTIONS ------------------------------------
+
+def legacy_align_frames(cube, ref_img, nframes, do_convolve=True):
+    """
+    This is legacy align_frames function using astroalign. 
     Align every frame in cube to ref_img.
     """
     if do_convolve == True:
@@ -184,8 +289,9 @@ def align_frames(cube, ref_img, nframes, do_convolve=True):
 
 
 
-def solve_and_align(directory, cubename, out_dir, do_convolve=True):
+def legacy_solve_and_align(directory, cubename, out_dir, do_convolve=True):
     """
+    This is legacy solve_and_align function using astroalign.
     Solve the first frame of a 3D cube, align other frames to it.
     Output an aligned WCS cube to out_dir. 
     Note the wait time for astrometry.net varies significantly with time of day.
@@ -213,7 +319,7 @@ def solve_and_align(directory, cubename, out_dir, do_convolve=True):
     os.remove(os.path.join(directory, 'solve_temporary.fits'))
 
     # align frames to ref_img
-    aligned_array = align_frames(cube=cube, ref_img=ref_img, nframes=nframes, do_convolve=do_convolve)
+    aligned_array = legacy_align_frames(cube=cube, ref_img=ref_img, nframes=nframes, do_convolve=do_convolve)
 
     # add essential cards from original header to WCS header; write to WCS fits
     wcs_header.set('EXPTIME', exptime, before='CTYPE1')
@@ -231,8 +337,9 @@ def solve_and_align(directory, cubename, out_dir, do_convolve=True):
 
 
 # %%
-def batch_solve_and_align(directory, out_dir, do_convolve=True):
+def legacy_batch_solve_and_align(directory, out_dir, do_convolve=True):
     """
+    This is legacy batch_solve_and_align using astroalign.
     Solve and align every cube in folder to ref_img.
     """
     cubelist = sorted(glob1(directory, '*.fits'))
@@ -263,7 +370,7 @@ def batch_solve_and_align(directory, out_dir, do_convolve=True):
         filt = hdu.header['FILTER']
 
         # align frames to ref_img
-        aligned_array = align_frames(cube=cube, ref_img=ref_img, nframes=nframes, do_convolve=do_convolve)
+        aligned_array = legacy_align_frames(cube=cube, ref_img=ref_img, nframes=nframes, do_convolve=do_convolve)
 
         # add essential cards from original header to WCS header; write to WCS fits
         wcs_header.set('EXPTIME', exptime, before='CTYPE1')
