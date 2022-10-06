@@ -11,7 +11,7 @@ from astropy.stats import gaussian_fwhm_to_sigma
 from astropy.convolution import Gaussian2DKernel, convolve
 
 from astroquery.astrometry_net import AstrometryNet
-import astroalign as aa
+# import astroalign as aa
 import alipy
 
 import sys
@@ -182,7 +182,7 @@ def alipy_align(directory, out_dir, refname=None):
         ref_image = os.path.join(directory, images_to_align[0])
     else:
         ref_image = os.path.join(directory, refname)
-    print(ref_image)
+    print('ref_image path =', ref_image)
 
     identifications = alipy.ident.run(ref_image, images_to_align, visu=False)
     # Put visu=True to get visualizations in form of png files (nice but much slower)
@@ -211,8 +211,8 @@ def alipy_align(directory, out_dir, refname=None):
             alipy.align.affineremap(id.ukn.filepath, id.trans, shape=outputshape, makepng=True)
 
             # Variant 2, using geomap/gregister, correcting also for distortions :
-            alipy.align.irafalign(id.ukn.filepath, id.uknmatchstars, id.refmatchstars, 
-                                                    shape=outputshape, makepng=False)
+            # alipy.align.irafalign(id.ukn.filepath, id.uknmatchstars, id.refmatchstars, 
+                                                    # shape=outputshape, makepng=False)
             # id.uknmatchstars and id.refmatchstars are simply lists of corresponding Star objects.
 
     # By default, the aligned images are written into a directory "alipy_out".
@@ -229,7 +229,44 @@ def alipy_align(directory, out_dir, refname=None):
     
     return
 
-    
+
+
+def solve_and_migrate_header(directory, refname=None):
+    """
+    Solve an image.
+    Apply the WCS transformation cards to all images in folder.
+    Preserve each slice's other header info.
+    Needs all slices already aligned by alipy_align()
+    """
+    imgnames = sorted(glob.glob(os.path.join(directory, '*.fits')))
+
+    if refname == None:
+        refname = sorted(glob1(directory, '*fits'))[0]
+    print('ref image name =', refname)
+
+    wcs_header = solve_img(directory=directory, imgname=refname)
+    del wcs_header['COMMENT']
+
+    for n in range(len(imgnames)):
+        with fits.open(imgnames[n]) as hdulist:
+            hdu = hdulist[0]
+            hdr = hdu.header
+            # obtain essential headers from each slice
+            exptime = float(hdu.header['EXPTIME'])
+            dateobs = hdu.header['DATE-OBS']
+            filt = hdu.header['FILTER']
+            sky = hdu.header['SKY']
+            # append essential headers to WCS header, overwrite file
+            new_hdr = wcs_header
+            new_hdr.set('EXPTIME', exptime, before='CTYPE1')
+            new_hdr.set('DATE-OBS', dateobs, before='CTYPE1')
+            new_hdr.set('FILTER', filt, before='CTYPE1')
+            new_hdr.set('SKY', sky, before='CTYPE1')
+            fits.writeto(imgnames[n], hdu.data, header=new_hdr, overwrite=True)
+        print('Header rewrite complete', n+1, '/', len(imgnames), 'frames')
+
+    return
+
 
 # ------------------------------------ LEGACY FUNCTIONS ------------------------------------
 
