@@ -51,6 +51,7 @@ calibrate_flat(cali_dir=cali_dir,
 
 
 # %%
+# !!! Use astroconda env in this cell!!!
 for cubename in cubelist:
     calibrate_cube(directory=directory, cubename=cubename, 
                     cali_dir=cali_dir, 
@@ -65,15 +66,19 @@ for cubename in cubelist:
 
 
 # %%
-for cubename in cubelist:
-    slice_cube(directory=directory, 
+redu_cubelist = sorted(glob1(directory+'/reduced_cubes', '*.fits'))
+for cubename in redu_cubelist:
+    slice_cube(directory=os.path.join(directory, 'reduced_cubes'), 
                 cubename=cubename,
                 out_dir=os.path.join(directory, 'sliced'))
 
-# %%
 
+# %%
+# !!! Use alipy env in this cell!!!
 alipy_align(directory=os.path.join(directory, 'sliced'),
             out_dir=os.path.join(directory, 'aligned'))
+
+solve_and_migrate_header(directory=os.path.join(directory, 'aligned'))
 
 
 # %%
@@ -90,5 +95,6 @@ for cubename in reduced_cubelist:
 
 batch_solve_and_align(directory=os.path.join(directory, 'reduced_cubes'), 
                         out_dir=os.path.join(directory, 'aligned_cubes'),
-                        do_convolve=False)"""
+                        do_convolve=False)
+"""
 
