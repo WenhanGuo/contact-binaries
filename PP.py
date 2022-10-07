@@ -7,14 +7,14 @@ from phot_functions import *
 from astropy.timeseries import TimeSeries
 from astropy.table import vstack
 import matplotlib.pyplot as plt
+ I want to update
 
-
-# directory = '/Users/danny/Mirror/ASTRO/Contact_Binary/data/CSS_034852/cgri_test/aligned_cubes'
-directory = '/Users/danny/Mirror/ASTRO/ASTR101/lab2/data/aligned'
+directory = '/Users/danny/Mirror/ASTRO/Contact_Binary/data/CSS_cgri_test/aligned'
+# directory = '/Users/danny/Mirror/ASTRO/ASTR101/lab2/data/aligned'
 cubelist = sorted(glob1(directory, '*.fits'))
 
-# out_dir = '/Users/danny/Mirror/ASTRO/JPL_NEO/Contact_Binary/data/CSS_034852/cgri_test'
-out_dir = '/Users/danny/Mirror/ASTRO/ASTR101/lab2/data'
+out_dir = '/Users/danny/Mirror/ASTRO/Contact_Binary/data/CSS_cgri_test'
+# out_dir = '/Users/danny/Mirror/ASTRO/ASTR101/lab2/data'
 
 
 # %%
@@ -24,16 +24,17 @@ hdu = hdulist[0]
 img = hdu.data
 wcs = WCS(hdu.header, naxis=2)
 
-# RA_Dec = '16h38m19.65s +03d48m52.0s'
-RA_Dec = '22h37m47.92s +01d32m02.25s'
+# RA_Dec = '16h38m19.65s +03d48m52.0s'   # for CSS_034852
+# RA_Dec = '22h37m47.92s +01d32m02.25s'   # for astro lab2
+RA_Dec = '21h36m54.12s +02d28m53.8s'
 target_sky_aperture, target_sky_annulus = sky_aperture_from_RADec(wcs=wcs, RA_Dec=RA_Dec, 
                                     radius=15.0, annulus=True, r_in=30.0, r_out=45.0)
 
-ref_sky_aperture, ref_sky_annulus = detect_stars(img, wcs, skymap=True, detection_threshold=5, 
+ref_sky_aperture, ref_sky_annulus = detect_stars(img, wcs, skymap=True, detection_threshold=8, 
                                     radius=15.0, annulus=True, r_in=30.0, r_out=45.0, 
-                                    xbounds=[100,1250], ybounds=[150,1400], 
+                                    xbounds=[100,1000], ybounds=[150,1200], 
                                     mask_coord=RA_Dec, 
-                                    visu=True, visu_dir=out_dir, high_res=False)
+                                    visu=True, visu_dir=out_dir, high_res=True)
 
 
 # %%
