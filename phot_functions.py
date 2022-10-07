@@ -410,6 +410,9 @@ def update_table(ts, mother_tablename):
 
 
 def normalize_target_table(directory, target_table='target_flux.ecsv'):
+    """
+    Normalize target flux in each filter separately.
+    """
     table = Table.read(os.path.join(directory, target_table))
     table_by_filt = table.group_by('filter')
     # number of filters = number of group key names
@@ -434,6 +437,13 @@ def normalize_target_table(directory, target_table='target_flux.ecsv'):
 
 
 def normalize_ref_table(directory, ref_table='ref_flux.ecsv'):
+    """
+    Normalize reference flux in each filter separately.
+    The column 'norm_ref_flux' is a 2d numpy array, same shape as RFM.
+    x axis of norm_ref_flux: different reference stars
+    y axis of norm_ref_flux: flux for 1 ref star, normalized separately by filters
+    For an explanation of RFM please see LCs_visualizer()
+    """
     table = Table.read(os.path.join(directory, ref_table))
     table_by_filt = table.group_by('filter')
     # number of filters = number of group key names
