@@ -9,33 +9,36 @@ from astropy.table import vstack
 import matplotlib.pyplot as plt
 
 
-directory = '/Users/danny/Mirror/ASTRO/JPL_NEO/Contact_Binary/data/CSS_034852/20220719/aligned_cubes'
-cubelist = sorted(glob1(directory, '*_aligned.fits'))
+# directory = '/Users/danny/Mirror/ASTRO/Contact_Binary/data/CSS_034852/cgri_test/aligned_cubes'
+directory = '/Users/danny/Mirror/ASTRO/ASTR101/lab2/data/aligned'
+cubelist = sorted(glob1(directory, '*.fits'))
 
-out_dir = '/Users/danny/Mirror/ASTRO/JPL_NEO/Contact_Binary/data/CSS_034852/20220719'
+# out_dir = '/Users/danny/Mirror/ASTRO/JPL_NEO/Contact_Binary/data/CSS_034852/cgri_test'
+out_dir = '/Users/danny/Mirror/ASTRO/ASTR101/lab2/data'
 
 
 # %%
 hdulist = fits.open(os.path.join(directory, cubelist[0]))
 hdu = hdulist[0]
-img = hdu.data[0]
+# img = hdu.data[0]
+img = hdu.data
 wcs = WCS(hdu.header, naxis=2)
 
-RA_Dec = '16h38m19.65s +03d48m52.0s'
+# RA_Dec = '16h38m19.65s +03d48m52.0s'
+RA_Dec = '22h37m47.92s +01d32m02.25s'
 target_sky_aperture, target_sky_annulus = sky_aperture_from_RADec(wcs=wcs, RA_Dec=RA_Dec, 
                                     radius=15.0, annulus=True, r_in=30.0, r_out=45.0)
 
-ref_sky_aperture, ref_sky_annulus = detect_stars(img, wcs, detection_threshold=5, 
+ref_sky_aperture, ref_sky_annulus = detect_stars(img, wcs, skymap=True, detection_threshold=5, 
                                     radius=15.0, annulus=True, r_in=30.0, r_out=45.0, 
                                     xbounds=[100,1250], ybounds=[150,1400], 
                                     mask_coord=RA_Dec, 
-                                    visu=True, visu_dir='/Users/danny/Desktop', high_res=True)
+                                    visu=True, visu_dir=out_dir, high_res=False)
 
 
 # %%
 target_tablename = os.path.join(out_dir, 'target_flux.ecsv')
 ref_tablename = os.path.join(out_dir, 'ref_flux.ecsv')
-
 assert os.path.exists(target_tablename) == False
 assert os.path.exists(ref_tablename) == False
 
@@ -43,41 +46,41 @@ for cubename in cubelist:
     print('\n---------------------------------------------')
     print('Performing photometry on', cubelist.index(cubename)+1, 'th cube')
     print('---------------------------------------------')
-
     target_ts, ref_ts = dual_thread_photometry(directory=directory, cubename=cubename,
-        target_sky_aperture=target_sky_aperture, ref_sky_aperture=ref_sky_aperture, 
-        annulus=True, target_sky_annulus=target_sky_annulus, ref_sky_annulus=ref_sky_annulus)
+                                                target_sky_aperture=target_sky_aperture, 
+                                                ref_sky_aperture=ref_sky_aperture, 
+                                                annulus=True, 
+                                                target_sky_annulus=target_sky_annulus, 
+                                                ref_sky_annulus=ref_sky_annulus)
+    update_table(ts=target_ts, mother_tablename=target_tablename)
+    update_table(ts=ref_ts, mother_tablename=ref_tablename)
 
-    if not os.path.exists(target_tablename):
-        # write target ts table to ecsv
-        target_ts.write(target_tablename, overwrite=False)
-    else:
-        existing_target_ts = TimeSeries.read(target_tablename, time_column='time')
-        new_target_ts = vstack([existing_target_ts, target_ts])
-        new_target_ts.write(target_tablename, overwrite=True)
-    
-    if not os.path.exists(ref_tablename):
-        # write ref ts table to ecsv
-        ref_ts.write(ref_tablename, overwrite=False)
-    else:
-        existing_ref_ts = TimeSeries.read(ref_tablename, time_column='time')
-        new_ref_ts = vstack([existing_ref_ts, ref_ts])
-        new_ref_ts.write(ref_tablename, overwrite=True)
-
+normalize_target_table(directory=out_dir, target_table='target_flux.ecsv')
+normalize_ref_table(directory=out_dir, ref_table='ref_flux.ecsv')
 
 
 # %%
 table, RFM = LCs_visualizer(directory=out_dir, visu_dir='/Users/danny/Desktop', 
-                                    mode='full', layout=[4,4])
+                                    mode='full', layout=[2,2])
 
 
 # %%
-reflist = [12, 10, 8, 11, 7]
+reflist = [1, 2]
 
 diff_lc_name = os.path.join(out_dir, 'diff_lc.ecsv')
 
 diff_lc = differential_photometry(directory=out_dir, reflist=reflist)
 diff_lc.write(diff_lc_name, overwrite=True)
+
+
+# %%
+# obj_dir = '/Users/danny/Mirror/ASTRO/JPL_NEO/Contact_Binary/data/CSS_034852'
+obj_dir = '/Users/danny/Mirror/ASTRO/ASTR101/lab2/data'
+
+fold_lc(obj_dir=obj_dir, table='diff_lc.ecsv')
+
+
+
 
 
 # %%
