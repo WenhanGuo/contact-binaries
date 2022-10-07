@@ -9,7 +9,7 @@ from astropy.coordinates import SkyCoord
 from astropy.stats import SigmaClip, sigma_clipped_stats, gaussian_fwhm_to_sigma
 from astropy.convolution import Gaussian2DKernel, convolve
 from astropy.timeseries import TimeSeries
-from astropy.table import QTable, vstack
+from astropy.table import vstack, Table
 import astropy.units as u
 
 from skimage.draw import disk
@@ -51,7 +51,7 @@ def estimate_background(img, mode='2D', visu=False, visu_dir=None, high_res=Fals
 
 
 
-def detect_stars(img, wcs, detection_threshold=5, radius=None, annulus=False, r_in=None, r_out=None, 
+def detect_stars(img, wcs, skymap=True, detection_threshold=5, radius=None, annulus=False, r_in=None, r_out=None, 
                                                         xbounds=None, ybounds=None, mask_coord=None, 
                                                         visu=False, visu_dir=None, high_res=False):
     """
@@ -76,8 +76,9 @@ def detect_stars(img, wcs, detection_threshold=5, radius=None, annulus=False, r_
 
     # subtract 2D background
     # ----------------------
-    skymap = estimate_background(img, mode='2D', visu=False)
-    img -= skymap
+    if skymap == True:
+        skymap = estimate_background(img, mode='2D', visu=False)
+        img -= skymap
 
     # create bounding box mask and source mask
     # ----------------------------------------
@@ -316,15 +317,21 @@ def dual_thread_photometry(directory, cubename, target_sky_aperture, ref_sky_ape
     """
     Combining simple_photometry and parallel_photometry. 
     Time-resolved circular aperture/annulus photometry on target star and reference stars,
-    While avoiding opening FITS cubes twice.
+    Avoid opening FITS cubes twice.
     Must provide target RA-Dec and ref star sky_aperture object.
     """
     # open cube and obtain wcs info
     hdulist = fits.open(os.path.join(directory, cubename))
     hdu = hdulist[0]
-    nframes = int(hdu.header['NAXIS3'])
+    if 'NAXIS3' in hdu.header:
+        # the image is a 3D cube
+        nframes = int(hdu.header['NAXIS3'])
+    else:
+        # the image is a 2D slice
+        nframes = 1
     exptime = float(hdu.header['EXPTIME']) * u.s
     dateobs = hdu.header['DATE-OBS'][:-6]
+    filt = hdu.header['FILTER']
     wcs = WCS(hdu.header, naxis=2)
 
     # define target aperture object by converting from sky to pixel
@@ -346,7 +353,10 @@ def dual_thread_photometry(directory, cubename, target_sky_aperture, ref_sky_ape
     ref_fluxlist = []
     for n in range(nframes):
         # subtract 2D background
-        img = hdu.data[n]
+        if nframes >= 2:
+            img = hdu.data[n]
+        if nframes == 1:
+            img = hdu.data
         skymap = estimate_background(img, mode='2D', visu=False)
         img -= skymap
 
@@ -372,11 +382,80 @@ def dual_thread_photometry(directory, cubename, target_sky_aperture, ref_sky_ape
     # output astropy TimeSeries object
     target_ts = TimeSeries(time_start=dateobs, time_delta=exptime, n_samples=nframes)
     target_ts['target_flux'] = target_fluxlist
+    target_ts['filter'] = filt
 
     ref_ts = TimeSeries(time_start=dateobs, time_delta=exptime, n_samples=nframes)
     ref_ts['ref_flux'] = ref_fluxlist
-     
+    ref_ts['filter'] = filt
+    
     return target_ts, ref_ts
+
+
+
+def update_table(ts, mother_tablename):
+    """
+    Utility function for updating / concatenating ts tables.
+    """
+    if not os.path.exists(mother_tablename):
+        # write ts table to ecsv for the first time
+        ts.write(mother_tablename, overwrite=False)
+    else:
+        # concatenate ts table onto existing mother table
+        existing_ts = TimeSeries.read(mother_tablename, time_column='time')
+        new_ts = vstack([existing_ts, ts])
+        new_ts.write(mother_tablename, overwrite=True)
+
+    return
+
+
+
+def normalize_target_table(directory, target_table='target_flux.ecsv'):
+    table = Table.read(os.path.join(directory, target_table))
+    table_by_filt = table.group_by('filter')
+    # number of filters = number of group key names
+    nfilt = len(table_by_filt.groups.keys)
+
+    norm_table = None
+    for n in range(nfilt):
+        # get a subtable containing 1 specific filter
+        subtable = table_by_filt.groups[n]
+        # normalize target_flux column
+        tf = subtable['target_flux']
+        subtable['norm_target_flux'] = tf / np.mean(tf)
+        # concatenate normalized subtables to form new norm_table
+        if norm_table is None:
+            norm_table = subtable
+        else:
+            norm_table = vstack([norm_table, subtable])
+    norm_table.write(os.path.join(directory, 'norm_target_flux.ecsv'), overwrite=True)
+
+    return
+
+
+
+def normalize_ref_table(directory, ref_table='ref_flux.ecsv'):
+    table = Table.read(os.path.join(directory, ref_table))
+    table_by_filt = table.group_by('filter')
+    # number of filters = number of group key names
+    nfilt = len(table_by_filt.groups.keys)
+
+    norm_table = None
+    for n in range(nfilt):
+        # get a subtable containing 1 specific filter
+        subtable = table_by_filt.groups[n]
+        # normalize ref_flux column (2d)
+        RFM = subtable['ref_flux']
+        subtable['norm_ref_flux'] = RFM
+        for nref in range(RFM.shape[1]):
+            subtable['norm_ref_flux'][:,nref] = RFM[:,nref] / np.mean(RFM[:,nref])
+        # concatenate normalized subtables to form new norm_table
+        if norm_table is None:
+            norm_table = subtable
+        else:
+            norm_table = vstack([norm_table, subtable])
+    norm_table.write(os.path.join(directory, 'norm_ref_flux.ecsv'), overwrite=True)
+
+    return
 
 
 
@@ -427,12 +506,11 @@ def differential_photometry(directory, reflist, target_flux='target_flux.ecsv', 
     # get specific columns from ref_table['ref_flux'] according to reflist
     raw_ref_flux = ref_table['ref_flux'][:, np.array(reflist)-1]
     diff_lc['raw_ref_flux'] = raw_ref_flux
-
     # normalize raw ref flux by column (by each ref star)
     norm_ref_flux = sknorm(raw_ref_flux, axis=0)
-    norm_ref_flux = norm_ref_flux / np.median(norm_ref_flux)
+    norm_ref_flux = norm_ref_flux / np.mean(norm_ref_flux)
     diff_lc['norm_ref_flux'] = norm_ref_flux
-    
+
     # smooth norm ref flux by column
     smooth_ref_flux = np.empty((0, len(diff_lc)))
     for n in range(len(reflist)):
@@ -446,7 +524,7 @@ def differential_photometry(directory, reflist, target_flux='target_flux.ecsv', 
 
     # differential photometry
     diff_lc['diff_flux'] = diff_lc['target_flux'] / diff_lc['mean_ref_flux']
-    diff_lc['norm_diff_flux'] = diff_lc['diff_flux'] / np.median(diff_lc['diff_flux'])
+    diff_lc['norm_diff_flux'] = diff_lc['diff_flux'] / np.mean(diff_lc['diff_flux'])
 
     return diff_lc
 
@@ -482,3 +560,5 @@ def fold_lc(obj_dir, table='diff_lc.ecsv'):
 
 
 
+
+# %%
