@@ -1,57 +1,20 @@
 # %%
+# !!! Use astroconda environment for this pipeline !!!
 import os
 from essentials import *
 from glob import glob1
 
-
-directory = '/Users/danny/Mirror/ASTRO/ASTR101/lab2/data'
-# directory = '/Users/danny/Mirror/ASTRO/Contact_Binary/data/CSS_034852/20220719'
-cali_dir='/Users/danny/Mirror/ASTRO/Calibration/CALIBS_20220921'
+# Input data directory here
+directory = '/Users/danny/Mirror/ASTRO/ASTR101/lab2/n3s1data'
+# directory = '/Users/danny/Mirror/ASTRO/Contact_Binary/data/CSS_cgri_test'
 cubelist = sorted(glob1(directory, '*.fits'))
 
-
-# %%
-# For creating sigma-clipped master frames from calibration cubes
-
-avg_cube(directory=cali_dir, 
-        cubename='Darks_20220921_001521.fits',
-        outname='Master_DarkBias.fits')
-avg_cube(directory=cali_dir, 
-        cubename='Biases_20220921_004356.fits',
-        outname='Master_Bias.fits')
-avg_cube(directory=cali_dir, 
-        cubename='twilights_7C_20220920_190121.fits',
-        outname='Master_Flat_C.fits')
-avg_cube(directory=cali_dir, 
-        cubename='twilights_4g_20220920_185345.fits',
-        outname='Master_Flat_g.fits')
-avg_cube(directory=cali_dir, 
-        cubename='twilights_2r_20220920_184356.fits',
-        outname='Master_Flat_r.fits')
-avg_cube(directory=cali_dir, 
-        cubename='twilights_1i_20220920_183559.fits',
-        outname='Master_Flat_i.fits')
+# Input super calibs directory here
+cali_dir='/Users/danny/Mirror/ASTRO/Calibration/CALIBS_20220921'
 
 
 # %%
-# calibrate master dark and master flats
-
-calibrate_flat(cali_dir=cali_dir, 
-                flatname='Master_Flat_C.fits',
-                darkbiasname='Master_DarkBias.fits')
-calibrate_flat(cali_dir=cali_dir, 
-                flatname='Master_Flat_g.fits',
-                darkbiasname='Master_DarkBias.fits')
-calibrate_flat(cali_dir=cali_dir, 
-                flatname='Master_Flat_r.fits',
-                darkbiasname='Master_DarkBias.fits')
-calibrate_flat(cali_dir=cali_dir, 
-                flatname='Master_Flat_i.fits',
-                darkbiasname='Master_DarkBias.fits')
-
-
-# %%
-# !!! Use astroconda env in this cell!!!
+# Calibrate cubes with dark, bias, and colored flats
 for cubename in cubelist:
     calibrate_cube(directory=directory, cubename=cubename, 
                     cali_dir=cali_dir, 
@@ -66,6 +29,7 @@ for cubename in cubelist:
 
 
 # %%
+# Slice cubes and increment timestamps
 redu_cubelist = sorted(glob1(directory+'/reduced_cubes', '*.fits'))
 for cubename in redu_cubelist:
     slice_cube(directory=os.path.join(directory, 'reduced_cubes'), 
@@ -74,7 +38,7 @@ for cubename in redu_cubelist:
 
 
 # %%
-# !!! Use alipy env in this cell!!!
+# Solve frame and align all images; migrate WCS headers
 alipy_align(directory=os.path.join(directory, 'sliced'),
             out_dir=os.path.join(directory, 'aligned'))
 
@@ -82,7 +46,6 @@ solve_and_migrate_header(directory=os.path.join(directory, 'aligned'))
 
 
 # %%
-
 # ------------------------------------ LEGACY FUNCTIONS ------------------------------------
 
 """
@@ -97,4 +60,3 @@ batch_solve_and_align(directory=os.path.join(directory, 'reduced_cubes'),
                         out_dir=os.path.join(directory, 'aligned_cubes'),
                         do_convolve=False)
 """
-
