@@ -1,16 +1,20 @@
 # %%
-# !!! Use astroconda environment for this pipeline !!!
+# This is the Pre-Process Pipeline for calibrating, solving, and aligning cubes
+# Input: raw data cubes in folder; super dark, bias, flats (multiple if filtered)
+# Output: aligned frames with WCS headers
+
+# !!! Use astroconda environment (python 3.7) for this pipeline !!!
+# alipy3-header version needs to be installed in the environment
 import os
 from essentials import *
 from glob import glob1
 
 # Input data directory here
-directory = '/Users/danny/Mirror/ASTRO/ASTR101/lab2/n3s1data'
-# directory = '/Users/danny/Mirror/ASTRO/Contact_Binary/data/CSS_cgri_test'
+directory = '/Volumes/TMO_Data_4TB/cb_data/C21+02/20221104'
 cubelist = sorted(glob1(directory, '*.fits'))
 
 # Input super calibs directory here
-cali_dir='/Users/danny/Mirror/ASTRO/Calibration/CALIBS_20220921'
+cali_dir='/Users/TMObserver/Documents/CALIBS_20220921'
 
 
 # %%
@@ -27,6 +31,15 @@ for cubename in cubelist:
                     iflat='Master_Flat_i_norm.fits',
                     out_dir=os.path.join(directory, 'reduced_cubes'))
 
+# for cubename in cubelist:
+#     calibrate_cube(directory=directory, cubename=cubename, 
+#                     cali_dir=cali_dir, 
+#                     darkbiasname='Master_DarkBias.fits', 
+#                     darkexptime=10.0, 
+#                     mode='monocolor', 
+#                     flatname='Master_Flat_C_norm.fits',
+#                     out_dir=os.path.join(directory, 'reduced_cubes'))
+
 
 # %%
 # Slice cubes and increment timestamps
@@ -38,10 +51,13 @@ for cubename in redu_cubelist:
 
 
 # %%
-# Solve frame and align all images; migrate WCS headers
+# Align all images to ref img, preserve headers
 alipy_align(directory=os.path.join(directory, 'sliced'),
             out_dir=os.path.join(directory, 'aligned'))
 
+
+# %%
+# Solve frame and migrate WCS headers
 solve_and_migrate_header(directory=os.path.join(directory, 'aligned'))
 
 
@@ -60,3 +76,5 @@ batch_solve_and_align(directory=os.path.join(directory, 'reduced_cubes'),
                         out_dir=os.path.join(directory, 'aligned_cubes'),
                         do_convolve=False)
 """
+
+# %%
