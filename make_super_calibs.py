@@ -1,6 +1,6 @@
 # %%
 # This is the pipeline to create super calibration frames from raw TMO cubes.
-# !!! Use astroconda environment for this pipeline !!!
+# !!! Use astroconda environment (python 3.7) for this pipeline !!!
 from essentials import *
 
 # Input calibration directory here
