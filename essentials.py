@@ -3,6 +3,7 @@ import os
 import numpy as np
 import glob
 from glob import glob1
+import shutil
 
 from astropy import units as u
 from astropy.nddata import CCDData
@@ -172,7 +173,7 @@ def solve_img(directory, imgname):
     return wcs_header
 
 
-def alipy_align(directory, out_dir, refname=None):
+def alipy_ident(directory, refname=None):
     """
     Adapted from do_alipy3. 
     Align 2D images in directory to ref.fits
@@ -188,45 +189,35 @@ def alipy_align(directory, out_dir, refname=None):
     # Put visu=True to get visualizations in form of png files (nice but much slower)
     # On multi-extension data, you will want to specify the hdu (see API doc).
 
-    fail = 0
+    return ref_image, identifications
+
+
+
+def alipy_align(ref_image, identifications, out_dir):
+
+    success = 0
     # The output is a list of Identification objects, which contain the transforms :
     for id in identifications: # list of the same length as images_to_align.
         if id.ok == True: # i.e., if it worked
-            print("%20s : %20s, flux ratio %.2f" % (id.ukn.name, id.trans, id.medfluxratio))
-            # id.trans is a alipy.star.SimpleTransform object. Instead of printing it out as a string,
-            # you can directly access its parameters :
-            #print id.trans.v # the raw data, [r*cos(theta)  r*sin(theta)  r*shift_x  r*shift_y]
-            #print id.trans.matrixform()
-            #print id.trans.inverse() # this returns a new SimpleTransform object
-        else:
-            fail += 1
-            print ("%20s : no transformation found !" % (id.ukn.name))
+            success += 1
+    print('Identification successful', success, '/', len(identifications), 'frames')
+    print('--------------------------------------------------')
 
     outputshape = alipy.align.shape(ref_image)
     # This is simply a tuple (width, height)... you could specify any other shape.
 
     for id in identifications:
         if id.ok == True:
-            # Variant 1, using only scipy and the simple affine transorm :
-            alipy.align.affineremap(id.ukn.filepath, id.trans, shape=outputshape, makepng=True)
-
-            # Variant 2, using geomap/gregister, correcting also for distortions :
-            # alipy.align.irafalign(id.ukn.filepath, id.uknmatchstars, id.refmatchstars, 
-                                                    # shape=outputshape, makepng=False)
-            # id.uknmatchstars and id.refmatchstars are simply lists of corresponding Star objects.
+            # Align using scipy and the simple affine transorm :
+            alipy.align.affineremap(id.ukn.filepath, id.trans, shape=outputshape, makepng=False)
 
     # By default, the aligned images are written into a directory "alipy_out".
     # Move alipy_out to desired output dir.
-    if not os.path.exists(out_dir):
-        print('Created', out_dir)
-        os.mkdir(out_dir)
-    original_path = './alipy_out/'
-    files = os.listdir(original_path)
-    for f in files:
-        os.rename(original_path+f, os.path.join(out_dir,f))
-    
-    print('Failed', fail, 'frames out of', len(identifications), 'frames.')
-    
+    if os.path.exists(out_dir):
+        os.rmdir(out_dir)
+    shutil.copytree('./alipy_out', out_dir)
+    os.rmdir('./alipy_out')
+
     return
 
 
