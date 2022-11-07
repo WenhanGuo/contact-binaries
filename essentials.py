@@ -216,7 +216,7 @@ def alipy_align(ref_image, identifications, out_dir):
     if os.path.exists(out_dir):
         os.rmdir(out_dir)
     shutil.copytree('./alipy_out', out_dir)
-    os.rmdir('./alipy_out')
+    shutil.rmtree('./alipy_out')
 
     return
 
@@ -260,7 +260,7 @@ def solve_and_migrate_header(directory, refname=None):
 
 
 # ------------------------------------ LEGACY FUNCTIONS ------------------------------------
-
+'''
 def legacy_align_frames(cube, ref_img, nframes, do_convolve=True):
     """
     This is legacy align_frames function using astroalign. 
@@ -413,4 +413,4 @@ def legacy_batch_solve_and_align(directory, out_dir, do_convolve=True):
                         aligned_array, header=wcs_header, overwrite=True)
 
     return
-
+'''
