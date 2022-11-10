@@ -10,11 +10,11 @@ from essentials import *
 from glob import glob1
 
 # Input data directory here
-directory = '/Volumes/TMO_Data_4TB/cb_data/C21+02/20221104'
+directory = '/Volumes/TMO_Data_4TB/cb_data/C01+13/20221106_newflat'
 cubelist = sorted(glob1(directory, '*.fits'))
 
 # Input super calibs directory here
-cali_dir='/Users/TMObserver/Documents/CALIBS_20220921'
+cali_dir='/Users/TMObserver/Documents/CALIBS_20221106'
 
 
 # %%
@@ -51,10 +51,12 @@ for cubename in redu_cubelist:
 
 
 # %%
-# Align all images to ref img, preserve headers
-alipy_align(directory=os.path.join(directory, 'sliced'),
-            out_dir=os.path.join(directory, 'aligned'))
+# Alipy source detection on all images
+ref_image, identifications = alipy_ident(directory=os.path.join(directory, 'sliced'))
 
+# %%
+# Align all images to ref img, preserve headers
+alipy_align(ref_image, identifications, out_dir=os.path.join(directory, 'aligned'))
 
 # %%
 # Solve frame and migrate WCS headers
