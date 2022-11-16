@@ -35,6 +35,10 @@ b.run_compute(model='default')
 _ = b.plot(x='phase', show=True)
 
 # %%
+b.add_solver('estimator.lc_periodogram')
+b.run_solver(kind='lc_periodogram', lc_datasets='lc01')
+
+# %%
 b.add_solver('estimator.ebai', ebai_method='knn', solver='ebai_knn')
 b.run_solver('ebai_knn', solution='ebai_knn_solution')
 
