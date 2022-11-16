@@ -394,7 +394,7 @@ def dual_thread_photometry(directory, cubename, target_sky_aperture, ref_sky_ape
 
 def update_table(ts, mother_tablename):
     """
-    Utility function for updating / concatenating ts tables.
+    Utility function for updating (concatenating) TimeSeries tables.
     """
     if not os.path.exists(mother_tablename):
         # write ts table to ecsv for the first time
