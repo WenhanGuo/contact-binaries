@@ -10,12 +10,17 @@ from astropy.timeseries import TimeSeries
 logger = phoebe.logger()
 
 b = phoebe.default_binary(contact_binary=True)
-b = b
 
 
 # %%
-directory = '/Users/danny/My_Root/ASTRO/Contact_Binary/data/CSS_034852/20220719/diff_lc.ecsv'
-ts = TimeSeries.read(directory, time_column='time')
+# Download csv from github, read into pandas
+url = 'https://raw.githubusercontent.com/WenhanGuo/contact-binaries/master/diff_lc.csv'
+df = pd.read_csv(url, delim_whitespace=True)
+df.set_index(pd.DatetimeIndex(df['time']), inplace=True)
+del df['time']
+
+# Convert to astropy TimeSeries
+ts = TimeSeries.from_pandas(df)
 
 # %%
 b.add_dataset('mesh', compute_times=[0], dataset='mesh01')
