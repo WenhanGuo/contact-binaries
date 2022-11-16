@@ -10,6 +10,7 @@ from astropy.timeseries import TimeSeries
 logger = phoebe.logger()
 
 b = phoebe.default_binary(contact_binary=True)
+b = b
 
 
 # %%
