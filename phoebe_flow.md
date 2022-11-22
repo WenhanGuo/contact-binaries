@@ -2,7 +2,7 @@
 
 ## Glossary
 vgamma      systemic velocity (similar to radial velocity)
-ltte        correct for light travel time effects [True/False]
+ltte        correct for light travel time effect [True/False]
 t0          time at which all values are provided and all computations start
 l3_mode     third light mode: flux unit or fraction of total flux ['flux'/'fraction']
     l3          appear if l3_mode == 'flux'. Third light in flux units
@@ -33,7 +33,6 @@ phases_dpdt dpdt used in conversion between compute_times and compute_phases
             when mapping, set phases_dpdt = 'none' so that compute_times are direct multiples of period
 pitch       misalignment of a star in the direction of inclination
 yaw         misalignment in the direction of longitude of a star's equator
-ltte        correct for light travel time effect (third star) [True/False]
 ## ------------------------------------- 1. System Effects --------------------------------------
 Systemic Velocity [vgamma] [ltte] [t0]
     <!-- http://phoebe-project.org/docs/2.4/tutorials/vgamma -->
@@ -67,8 +66,6 @@ Misalignment [pitch] [yaw]
     2F, 1C
     default F: orbital inclination, pitch / orbital long_an, yaw
     default C: inclination of component / long_an of component
-Rømer & Light Travel Time Effects [ltte]
-    <!-- http://phoebe-project.org/docs/2.4/tutorials/ltte -->
 
 ## ------------------------------------- 3. Stellar Effects -------------------------------------
 Equivalent Radius
