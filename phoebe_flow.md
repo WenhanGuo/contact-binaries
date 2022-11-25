@@ -39,15 +39,20 @@ pot         potential of the contact envelope
 fillout_factor  fillout_factor of the envelope
 logg        stellar surface gravity at requiv
 spot params
-    colat   latitude of spot, 0 is defined as the North (spin) Pole
-    long    longitude of spot, 0 is defined as pointing towards the other star
-    radius  angular radius of spot
-    relteff ratio of temperature of the spot to the local intrinsic value
-    enabled if spot is enabled [True/False]
+    colat       latitude of spot, 0 is defined as the North (spin) Pole
+    long        longitude of spot, 0 is defined as pointing towards the other star
+    radius      angular radius of spot
+    relteff     ratio of temperature of the spot to the local intrinsic value
+    enabled     if spot is enabled [True/False]
 eclipse_method  method of eclipse calculation ['native'/'visible_partial']
-                native: computes what percentage (by area) of each triangle is visible
-                visible_partial: assigns visibility = 0.5 to partially visible triangles
-
+    native: computes what percentage (by area) of each triangle is visible
+    visible_partial: assigns visibility = 0.5 to partially visible triangles
+pblum_mode  mode to handle passband luminosity
+    component-coupled   provide pblum for one star (by default L1), compute pblum for the other
+    decoupled           provide pblums for each star independently
+    absolute            obtain unscaled pblums, in passband watts, computed from atmosphere tables
+    dataset-scaled      calculate pblum for each star from abs flux, scale to dataset
+    dataset-coupled     all datasets scaled with the same scaling factor
 
 ## ------------------------------------- 1. System Effects --------------------------------------
 Systemic Velocity [vgamma] [ltte] [t0]
@@ -99,9 +104,23 @@ Spots [colat] [long] [radius] [relteff] [enabled]
     <!-- http://phoebe-project.org/docs/2.4/tutorials/spots -->
 Eclipse Detection [eclipse_method]
     <!-- http://phoebe-project.org/docs/2.4/tutorials/eclipse -->
-Passband Luminosity
+Passband Luminosity [pblum_mode] [pblum]
     <!-- http://phoebe-project.org/docs/2.4/tutorials/pblum -->
-Gravity Brightening/Darkening
+    [pblum_mode] = 'component-coupled' (default)
+        User provides passband luminosities for a single star in the system, secondary star is scaled accordingly.
+        default: [pblum] = 4π (12.57 W). (flux from primary of ~1; identical secondary so total flux ~2)
+        ** setting component temperature has a large effect since flux scales to T^4
+    [pblum_mode] = 'decoupled' (undesirable)
+        Separate [pblum] for primary and secondary; both params are available now and can have different values.
+        ** setting component temperature has no effect since luminosity will be rescaled to primary
+    [pblum_mode] = 'absolute'
+        Luminosities and fluxes will be returned in absolute units and not rescaled.
+    [pblum_mode] = 'dataset-scaled'
+        Only allowed if fluxes are attached to the dataset. Resulting model will be scaled to best fit the data.
+    [pblum_mode] = 'dataset-coupled'
+        Allows for the same scaling factor to be applied to two different datasets. 
+Gravity Brightening/Darkening [gravb_bol]
+    <!-- http://phoebe-project.org/docs/2.4/tutorials/gravb_bol -->
 Reflection & Heating
 Reflection & Heating: Lambert Scattering
 Radial Velocity Offsets
