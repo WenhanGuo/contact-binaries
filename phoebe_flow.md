@@ -19,20 +19,36 @@ ecc         eccentricity
 ecosw       eccentricity times cos of periastron angle
 esinw       eccentricity times sin of periastron angle
 period      sidereal orbital period, zero point defined near one of the t0s
-dperdt      dperdt = 0 if not precessing, dperdt =/= 0 if precessing (apsidal motion)
+dperdt      dperdt = 0 if not precessing, dperdt ≠ 0 if precessing (apsidal motion)
             dperdt between t0 and other reference times is used in constrainining t0_subconj, t0_perpass, t0_ref
 period_anom anomalistic orbital period (time between two successive periastron passages)
-            longer than sidereal period if dperdt =/= 0 --> breaks Kepler's law assumptions
+            longer than sidereal period if dperdt ≠ 0 --> breaks Kepler's law assumptions
 per0        periastron angle (angle between periastron and ascending node), defined at t0
 syncpar     ratio between sidereal orbital period and rotational period wrt the sky
             syncpar = 1 and dperdt = 0 --> stars are co-rotating
-            syncpar = 1 and dperdt =/= 0 --> star is rotating wrt the sky at the same rate as sidereal period
+            syncpar = 1 and dperdt ≠ 0 --> star is rotating wrt the sky at the same rate as sidereal period
 dpdt        time derivative of anomalistic period (= sidereal period if not precessing)
             set dpdt = 0 to see eclipses spread across the phase-space when plotting
 phases_dpdt dpdt used in conversion between compute_times and compute_phases
             when mapping, set phases_dpdt = 'none' so that compute_times are direct multiples of period
 pitch       misalignment of a star in the direction of inclination
 yaw         misalignment in the direction of longitude of a star's equator
+
+requiv      equivalent radius
+pot         potential of the contact envelope
+fillout_factor  fillout_factor of the envelope
+logg        stellar surface gravity at requiv
+spot params
+    colat   latitude of spot, 0 is defined as the North (spin) Pole
+    long    longitude of spot, 0 is defined as pointing towards the other star
+    radius  angular radius of spot
+    relteff ratio of temperature of the spot to the local intrinsic value
+    enabled if spot is enabled [True/False]
+eclipse_method  method of eclipse calculation ['native'/'visible_partial']
+                native: computes what percentage (by area) of each triangle is visible
+                visible_partial: assigns visibility = 0.5 to partially visible triangles
+
+
 ## ------------------------------------- 1. System Effects --------------------------------------
 Systemic Velocity [vgamma] [ltte] [t0]
     <!-- http://phoebe-project.org/docs/2.4/tutorials/vgamma -->
@@ -52,7 +68,7 @@ Extinction [ebv] [Av] [Rv]
 Various t0s [t0_supconj] [t0_perpass] [t0_ref] [t0]
     <!-- http://phoebe-project.org/docs/2.4/tutorials/t0s -->
     1F, 2C
-    default F: [t0_subconj]
+    default F: [t0_supconj]
 Eccentricity & Volume Conservation [ecc] [ecosw] [esinw]
     <!-- http://phoebe-project.org/docs/2.4/tutorials/ecc -->
     1F, 2C
@@ -68,17 +84,23 @@ Misalignment [pitch] [yaw]
     default C: inclination of component / long_an of component
 
 ## ------------------------------------- 3. Stellar Effects -------------------------------------
-Equivalent Radius
-Potentials
-Critical Radii: Detached Systems
-Critical Radii: Semidetached Systems
+Equivalent Radius [requiv]
+    <!-- http://phoebe-project.org/docs/2.4/tutorials/requiv -->
 Critical Radii: Contact Systems [requiv@primary] [requiv@secondary] [pot] [fillout_factor]
     <!-- http://phoebe-project.org/docs/2.4/tutorials/requiv_crit_contact -->
-Surface Gravities
-Eccentricity & Volume Conservation
-Spots
-Eclipse Detection
+    1F, 3C
+    default F: [requiv@primary]
+    default C: [requiv@secondary] [pot] [fillout_factor]
+    [requiv] and [pot] are also constrained by C params [requiv_max] [requiv_min] [pot_max] [pot_min]
+    To provide any of the three C params, see link to flip constraints
+Surface Gravity [logg]
+    <!-- http://phoebe-project.org/docs/2.4/tutorials/logghttp://phoebe-project.org/docs/2.4/tutorials/logg -->
+Spots [colat] [long] [radius] [relteff] [enabled]
+    <!-- http://phoebe-project.org/docs/2.4/tutorials/spots -->
+Eclipse Detection [eclipse_method]
+    <!-- http://phoebe-project.org/docs/2.4/tutorials/eclipse -->
 Passband Luminosity
+    <!-- http://phoebe-project.org/docs/2.4/tutorials/pblum -->
 Gravity Brightening/Darkening
 Reflection & Heating
 Reflection & Heating: Lambert Scattering
