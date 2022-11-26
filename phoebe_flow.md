@@ -59,6 +59,15 @@ irrad_frac_lost_bol     fraction of incident flux lost/ignored
 irrad_method    the method to use to handle all irradiation effects ['none'/'wilson'/'horvat']
 rv_offset       radial velocity offset
 
+atm             per-component atmosphere table ['ck2004'/'blackbody'/'extern_atmx'/'extern_planckint'/'phoenix']
+                if not 'ck2004' (Castelli-Kurucz): ld_func must not be 'interp'
+passband        passband to compute intensities for each star
+ld_mode         mode to use for per-component passband limb darkening ['interp'/'lookup'/'manual']
+ld_mode_bol     mode to use for per-component bolometric limb darkening ['lookup'/'manual']
+ld_func_bol     per-component bolometric limb darkening model
+                ['linear'/'logarithmic'/'quadratic'/'square_root'/'power']
+ld_coeffs_source_bol    source for bolometric limb darkening coefficients ['auto'/'phoenix'/'ck2004']
+ld_coeffs_bol   per-component bolometric limb darkening coefficients
 ## ------------------------------------- 1. System Effects --------------------------------------
 Systemic Velocity [vgamma] [ltte] [t0]
     <!-- http://phoebe-project.org/docs/2.4/tutorials/vgamma -->
@@ -144,10 +153,18 @@ Radial Velocity Offsets [rv_offset]
     <!-- http://phoebe-project.org/docs/2.4/tutorials/rv_offset -->
 
 ## --------------------------- 4. Passband/Atmosphere/Dataset Effects ---------------------------
-Passbands & Atmospheres
-Passband Luminosity
-Limb Darkening
-Third Light
+Passbands & Atmospheres [atm] [passband]
+    <!-- http://phoebe-project.org/docs/2.4/tutorials/atm_passbands -->
+Limb Darkening [ld_mode] [ld_mode_bol] [ld_func] [ld_func_bol] [ld_coeffs_source] [ld_coeffs_source_bol] [ld_coeffs] [ld_coeffs_bol]
+    <!-- http://phoebe-project.org/docs/2.4/tutorials/limb_darkening -->
+    [ld_mode_bol] = 'lookup': interpolate bolometric LD coefficients per-component
+    [ld_mode_bol] = 'manual': pass bolometric LD coefficients manually
+    [ld_coeffs_source_bol] = 'auto': interpolate from applicable table according to atm
+    [ld_mode] = 'interp'
+        Interpolate passband LD coefficients from atmospheric tables
+        [ld_func], [ld_coeffs_source] and [ld_coeffs] are invisible (irrelevant)
+    [ld_mode] = 'lookup': interpolate passband LD coefficients per-element, expose [ld_func] and [ld_coeffs_source]
+    [ld_mode] = 'manual': manually set [ld_coeffs], expose [ld_func] and [ld_coeffs], need to fit LD model
 Gravitational Redshift
 Radial Velocity Offsets
 Intensity Weighting
