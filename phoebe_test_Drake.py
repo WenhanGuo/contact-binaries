@@ -17,33 +17,34 @@ b = phoebe.default_binary(contact_binary=True)
 url = 'https://raw.githubusercontent.com/WenhanGuo/contact-binaries/master/CSS_0113_lcdata.csv'
 df = pd.read_csv(url)
 
+MJD = np.array(df['MJD'])
+MJD = MJD - MJD[0]   # set MJD start from 0 for t0 argument
+MJD = MJD % 0.3439788   # fold time into delta time
+
+fluxes = 10 ** (-np.array(df['Mag']) + 25)   # obtain flux from mag
 
 # %%
 b.set_value('period@binary', value = 0.3439788)
-b.set_value('teff@component', component='primary', value=5742.)
-b.set_value('teff@component', component='secondary', value=5600.)
 b.set_value('incl', component='binary', value = 89.6)
-# b.set_value('q', value = 0.110)
-# b.set_value('requiv@component', component='primary', value=0.594)
-# b.set_value('requiv@component', component='secondary', value=0.237)
 
-# b.set_value('fillout_factor@component@envelope', value=0.68)
-# b.flip_constraint('mass@primary', solve_for='sma')
-# b.set_value('mass@component', component='primary', value=1.25)
-# b.set_value('mass@component', component='secondary', value=0.14)
+b['teff@primary'] = 5742
+b['teff@secondary'] = 5600
+
+b.flip_constraint('mass@primary', solve_for='sma@binary')
+b.set_value('mass@component', component='primary', value=1.25)
+b.set_value('q', value = 0.110)
+
+b['requiv@primary'] = 1.37
 
 # %%
-MJD = np.array(df['MJD'])
-fluxes = 10 ** (-np.array(df['Mag']) + 25)
-fluxes = fluxes / np.median(fluxes)
+print(b.run_checks())   # check if modeling is possible
 
+# %%
 b.add_dataset('lc', times=MJD, fluxes=fluxes, dataset='lc01')
 b.add_dataset('mesh', compute_times=[0], dataset='mesh01')
 
-b.set_value_all('ld_mode', 'manual')
-b.set_value_all('ld_mode_bol', 'manual')
-b.set_value_all('atm', 'blackbody')
-# b.set_value('pblum_mode', 'dataset-scaled')
+b.set_value_all('gravb_bol', 0.32)   # set gravity darkening = 0.32 for both stars since both are convective
+b.set_value('pblum_mode', 'dataset-scaled')   # scale passband luminosity to dataset
 
 b.run_compute(model='default')
 _ = b.plot(x='phase', show=True)
@@ -56,7 +57,7 @@ b.run_solver('ebai_knn', solution='ebai_knn_solution')
 # %%
 b.flip_constraint('teffratio', solve_for='teff@secondary')
 b.flip_constraint('pot@contact_envelope', solve_for='requiv@primary')
-
+# this cell is sus, flipping these might lead model away from true value
 print(b.adopt_solution('ebai_knn_solution'))
 
 # %%
