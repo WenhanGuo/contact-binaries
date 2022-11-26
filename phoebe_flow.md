@@ -68,6 +68,10 @@ ld_func_bol     per-component bolometric limb darkening model
                 ['linear'/'logarithmic'/'quadratic'/'square_root'/'power']
 ld_coeffs_source_bol    source for bolometric limb darkening coefficients ['auto'/'phoenix'/'ck2004']
 ld_coeffs_bol   per-component bolometric limb darkening coefficients
+intens_weighting        whether passband intensities are weighted by energy or photons ['energy'/'photon']
+exptime         exposure time (time is defined as mid-exposure)
+fti_method      how to handle finite-time integration (when non-zero exptime) ['none'/'oversample']
+fti_oversample  number of times to sample per-datapoint (averaged) for finite-time integration, default to 5
 ## ------------------------------------- 1. System Effects --------------------------------------
 Systemic Velocity [vgamma] [ltte] [t0]
     <!-- http://phoebe-project.org/docs/2.4/tutorials/vgamma -->
@@ -165,8 +169,12 @@ Limb Darkening [ld_mode] [ld_mode_bol] [ld_func] [ld_func_bol] [ld_coeffs_source
         [ld_func], [ld_coeffs_source] and [ld_coeffs] are invisible (irrelevant)
     [ld_mode] = 'lookup': interpolate passband LD coefficients per-element, expose [ld_func] and [ld_coeffs_source]
     [ld_mode] = 'manual': manually set [ld_coeffs], expose [ld_func] and [ld_coeffs], need to fit LD model
-Gravitational Redshift
-Radial Velocity Offsets
-Intensity Weighting
-Finite Time of Integration
+Gravitational Redshift (irrelevant for lc) [rv_grav]
+    <!-- http://phoebe-project.org/docs/2.4/tutorials/grav_redshift -->
+Intensity Weighting [intens_weighting]
+    <!-- http://phoebe-project.org/docs/2.4/tutorials/intens_weighting -->
+Finite Time of Integration (fti) [exptime] [fti_method]
+    <!-- http://phoebe-project.org/docs/2.4/tutorials/fti -->
+    [fti_method] = 'oversample': expose [fti_oversample]
 Gaussian Processes
+    <!-- http://phoebe-project.org/docs/2.4/examples/minimal_GPs -->
