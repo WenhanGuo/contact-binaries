@@ -79,7 +79,7 @@ print(b.adopt_solution('ebai_knn_solution'))
 
 # %%
 # forward model from adopted KNN solutions
-b.run_compute(model='ebai_knn_model')
-_ = b.plot(x='phase', ls='-', legend=True, show=True)
+b.run_compute(model='ebai_knn_model', overwrite=True)
+_ = b.plot(x='times', ls='-', legend=True, show=True) # plotting phases returned a null twig, changed to times
 
 # %%
