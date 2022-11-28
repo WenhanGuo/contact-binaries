@@ -35,15 +35,34 @@ b.add_dataset('orb', compute_times=np.linspace(0,0.3439788,101), dataset='orb01'
 
 # print(b['passband'])
 # print(phoebe.list_online_passbands())
-# b.set_value('passband', 'SDSS:g') # SDSS:g is currently not a passband option, list_online_passbands is corrupted
 
+# pb = '' # url to pb file
+# phoebe.install_passband(pb, local=True)
+# b.set_value('passband', 'SDSS:g')
 # %%
 b.set_value_all('ld_mode', 'lookup')
 b.set_value_all('ld_mode_bol', 'lookup')
 b.set_value_all('atm', 'ck2004')
 b.set_value('pblum_mode', 'dataset-scaled')
-b.set_value('Av', 0.179)
 
+b['period@binary'] = 0.3439788   # period = 0.34 day
+b['t0_supconj'] = 0.14   # primary eclipse time (zero phase) = 0.14 day
+b['incl@binary'] = 89.6
+
+b['teff@primary'] = 5742
+b['teff@secondary'] = 5600
+
+b.flip_constraint('mass@primary', solve_for='sma@binary')
+b['mass@primary@component'] = 1.25
+b['q'] = 0.110
+
+b['requiv@primary'] = 1.37
+
+b['Av'] = 0.179
+
+print(b)
+
+# %%
 b.run_compute(model='default')
 _ = b.plot(x='times', show=True)
 
