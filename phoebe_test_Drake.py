@@ -25,6 +25,7 @@ fluxes = 10 ** (-np.array(df['Mag']) + 25)   # obtain flux from mag
 
 
 # %%
+# setting params
 b['period@binary'] = 0.3439788   # period = 0.34 day
 b['t0_supconj'] = 0.14   # primary eclipse time (zero phase) = 0.14 day
 b['incl@binary'] = 89.6
@@ -43,9 +44,12 @@ print(b.run_checks())   # check if run_compute is possible
 print(b)   # check full parameters; it's already close to Christopolou's values
 
 # %%
+# forward model
+orbphases = phoebe.linspace(0,1,101)
+meshphases = phoebe.linspace(0,1,31)
 b.add_dataset('lc', times=MJD, fluxes=fluxes, dataset='lc01')   # add Drake lc dataset
-b.add_dataset('orb', compute_times=np.linspace(0,0.3439788,101), dataset='orb01')   # init empty orbit dataset
-b.add_dataset('mesh', compute_times=np.linspace(0,0.3439788,31), dataset='mesh01', columns=['teffs'])   # init empty mesh dataset, expose teffs
+b.add_dataset('orb', compute_phases=orbphases, dataset='orb01')   # init empty orbit dataset
+b.add_dataset('mesh', compute_phases=meshphases, dataset='mesh01', columns=['teffs'])   # init empty mesh dataset, expose teffs
 
 b.set_value_all('gravb_bol', 0.32)   # set gravity darkening = 0.32 for both stars since both are convective
 b.set_value_all('pblum_mode', 'dataset-scaled')   # scale passband luminosity to dataset
@@ -53,9 +57,9 @@ b.set_value_all('pblum_mode', 'dataset-scaled')   # scale passband luminosity to
 b.run_compute(model='default')
 
 # %%
+# simple plotting
 b.plot('lc01', x='phase', size=0.01, legend=True, show=True, save='lc.png')   # plot lc data and forward model
-b.plot('mesh01', time=0, legend=True, fc='teffs', ec='None', fcmap='inferno', show=True)   # plot mesh w/ temp color @t0
-
+b.plot('mesh01', phase=0, legend=True, fc='teffs', ec='None', fcmap='inferno', show=True)   # plot mesh w/ temp color @t0
 # animations
 b.plot(y={'orb':'ws'}, size=0.01, fc={'mesh':'teffs'}, ec={'mesh':'None'}, 
         fcmap='inferno', animate=True, save='animations_1.gif')   # sync animation for lc, orb, mesh
@@ -66,20 +70,27 @@ b.plot('mesh01', fc='teffs', ec='None', fcmap='inferno', legend=True, animate=Tr
 # %%
 # start of inverse problem: add and run KNN estimator
 b.add_solver('estimator.ebai', ebai_method='knn', solver='ebai_knn')
-b.run_solver('ebai_knn', solution='ebai_knn_solution')
+b.run_solver('ebai_knn', solution='ebai_knn_sol')
+print(b.adopt_solution('ebai_knn_sol', trial_run=True))   # see proposed KNN solution params before adopting
 
 # %%
 # adopting KNN proposed solutions
-# this cell is sus, flipping these might lead model away from true value
 b.flip_constraint('teffratio', solve_for='teff@secondary')
-b.flip_constraint('pot@contact_envelope', solve_for='requiv@primary')
+print(b.adopt_solution('ebai_knn_sol', adopt_parameters=['t0_supconj','teffratio','incl']))
 
-# print(b.adopt_solution('ebai_knn_solution', trial_run=True))
-print(b.adopt_solution('ebai_knn_solution'))
+# flipping pot and adopting all params might lead model away from true value
+# b.flip_constraint('pot@contact_envelope', solve_for='requiv@primary')
+# print(b.adopt_solution('ebai_knn_sol'))
 
 # %%
 # forward model from adopted KNN solutions
-b.run_compute(model='ebai_knn_model', overwrite=True)
-_ = b.plot(x='times', ls='-', legend=True, show=True) # plotting phases returned a null twig, changed to times
+b.run_compute(model='ebai_knn_model')
+b.plot('lc01', x='phase', ls='-', legend=True, show=True)
+
+# %%
+# nelder_mead optimizer run with 1000 iterations
+b.add_solver('optimizer.nelder_mead', 
+            fit_parameters=['teffratio', 'incl@binary', 'q', 'per0'], solver='nm_solver')
+b.run_solver('nm_solver', maxiter=1000, solution='nm_sol')
 
 # %%
