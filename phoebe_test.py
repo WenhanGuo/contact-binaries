@@ -33,13 +33,10 @@ b.add_dataset('mesh', compute_times=np.linspace(0,0.3439788,31), dataset='mesh01
 b.add_dataset('lc', times=MJD, fluxes=fluxes, dataset='lc01')
 b.add_dataset('orb', compute_times=np.linspace(0,0.3439788,101), dataset='orb01')
 
-# print(b['passband'])
-# print(phoebe.list_online_passbands())
-
-# pb = '' # url to pb file
-# phoebe.install_passband(pb, local=True)
-# b.set_value('passband', 'SDSS:g')
 # %%
+print(phoebe.list_online_passbands())
+b.set_value('passband', 'SDSS:g')
+
 b.set_value_all('ld_mode', 'lookup')
 b.set_value_all('ld_mode_bol', 'lookup')
 b.set_value_all('atm', 'ck2004')
