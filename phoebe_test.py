@@ -48,6 +48,7 @@ b.set_value('pblum_mode', 'dataset-scaled')
 b['period@binary'] = 0.3439788   # period = 0.34 day
 b['t0_supconj'] = 0.14   # primary eclipse time (zero phase) = 0.14 day
 b['incl@binary'] = 89.6
+b['Av'] = 0.179
 
 b['teff@primary'] = 5742
 b['teff@secondary'] = 5600
@@ -57,8 +58,6 @@ b['mass@primary@component'] = 1.25
 b['q'] = 0.110
 
 b['requiv@primary'] = 1.37
-
-b['Av'] = 0.179
 
 print(b)
 
