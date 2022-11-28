@@ -22,17 +22,30 @@ del df['time']
 # Convert to astropy TimeSeries
 ts = TimeSeries.from_pandas(df)
 
-# %%
-b.add_dataset('mesh', compute_times=[0], dataset='mesh01')
-b.add_dataset('lc', times=ts.time.jd, fluxes=ts['diff_flux'], dataset='lc01')
+MJD = ts['time'].mjd
+MJD = MJD - MJD[0]   # set MJD start from 0 for t0 argument
+MJD = MJD % 0.3439788   # fold time into delta time
 
-b.set_value_all('ld_mode', 'manual')
-b.set_value_all('ld_mode_bol', 'manual')
-b.set_value_all('atm', 'blackbody')
+fluxes = ts['diff_flux']
+
+# %%
+b.add_dataset('mesh', compute_times=np.linspace(0,0.3439788,31), dataset='mesh01')
+b.add_dataset('lc', times=MJD, fluxes=fluxes, dataset='lc01')
+b.add_dataset('orb', compute_times=np.linspace(0,0.3439788,101), dataset='orb01')
+
+# print(b['passband'])
+# print(phoebe.list_online_passbands())
+# b.set_value('passband', 'SDSS:g') # SDSS:g is currently not a passband option, list_online_passbands is corrupted
+
+# %%
+b.set_value_all('ld_mode', 'lookup')
+b.set_value_all('ld_mode_bol', 'lookup')
+b.set_value_all('atm', 'ck2004')
 b.set_value('pblum_mode', 'dataset-scaled')
+b.set_value('Av', 0.179)
 
 b.run_compute(model='default')
-_ = b.plot(x='phase', show=True)
+_ = b.plot(x='times', show=True)
 
 # %%
 b.add_solver('estimator.lc_periodogram')
