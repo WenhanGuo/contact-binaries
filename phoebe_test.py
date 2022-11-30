@@ -62,7 +62,7 @@ b['requiv@primary'] = 1.37
 print(b)
 
 # %%
-#b.run_compute(model='default')
+b.run_compute(model='default')
 _ = b.plot(x='times', show=True, size=0.001)
 
 # %%
@@ -74,8 +74,8 @@ b.add_solver('estimator.ebai', ebai_method='knn', solver='ebai_knn', overwrite=T
 b.run_solver('ebai_knn', solution='ebai_knn_solution', phase_bin=False)
 
 # %%
-# b.flip_constraint('teffratio', solve_for='teff@secondary')
-# b.flip_constraint('pot@contact_envelope', solve_for='requiv@primary')
+b.flip_constraint('teffratio', solve_for='teff@secondary')
+b.flip_constraint('pot@contact_envelope', solve_for='requiv@primary')
 
 print(b.adopt_solution('ebai_knn_solution'))
 # print(b.adopt_solution('ebai_knn_sol', adopt_parameters=['t0_supconj','teffratio','incl']))
