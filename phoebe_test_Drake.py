@@ -94,3 +94,41 @@ b.add_solver('optimizer.nelder_mead',
 b.run_solver('nm_solver', maxiter=1000, solution='nm_sol')
 
 # %%
+b.add_solver('sampler.emcee', solver='emcee_solver')
+b.set_value('compute', solver='emcee_solver', value='fastcompute')
+b.set_value('pblum_mode', 'dataset-coupled')
+
+b.add_distribution({'t0_supconj': phoebe.gaussian_around(0.01),
+                    'teffratio@binary': phoebe.gaussian_around(0.1),
+                    'incl@binary': phoebe.gaussian_around(5),
+                    'fillout_factor@contact_envelope': phoebe.gaussian_around(0.5),
+                    'q@primary': phoebe.gaussian_around(0.5),
+                    'pblum@primary': phoebe.gaussian_around(0.2),
+                    'sigmas_lnf@lc01': phoebe.uniform(-1e9, -1e4),
+                   }, distribution='ball_around_guess')
+b.run_compute(compute='fastcompute', sample_from='ball_around_guess',
+                sample_num=10, model='init_from_model')
+_ = b.plot('lc01', x='phase', ls='-', model='init_from_model', show=True)
+
+# %%
+b['init_from'] = 'ball_around_guess'
+b.set_value('nwalkers', solver='emcee_solver', value=14)
+b.set_value('niters', solver='emcee_solver', value=500)
+
+b.run_solver('emcee_solver', solution='emcee_solution')
+print(b.adopt_solution(solution='emcee_solution', distribution='emcee_posteriors'))
+_ = b.plot_distribution_collection(distribution='emcee_posteriors', show=True)
+b.uncertainties_from_distribution_collection(distribution='emcee_posteriors', sigma=3, tex=False)
+
+# %%
+# Show corner plot
+_ = b.plot(solution='emcee_solution', style='corner', show=True)
+
+# %%
+# Show corner plot with failed and rejected samples
+_ = b.plot(solution='emcee_solution', style='failed', show=True)
+
+# %%
+b.run_compute(compute='fastcompute', sample_from='emcee_solution',
+                sample_num=20, model='emcee_sol_model')
+_ = b.plot('lc01', x='phase', ls='-', model='emcee_sol_model', show=True)
