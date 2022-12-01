@@ -81,7 +81,7 @@ print(b.adopt_solution('ebai_knn_solution'))
 # print(b.adopt_solution('ebai_knn_sol', adopt_parameters=['t0_supconj','teffratio','incl']))
 
 # %%
-b.run_compute(model='ebai_knn_model')
+b.run_compute(model='ebai_knn_model', overwrite=True)
 _ = b.plot('lc01', x='phase', ls='-', legend=True, show=True)
 
 # %%
@@ -97,8 +97,48 @@ b.set_value('pblum_mode', 'dataset-coupled')
 b.add_distribution({'t0_supconj': phoebe.gaussian_around(0.01),
                     'teffratio@binary': phoebe.gaussian_around(0.1),
                     'incl@binary': phoebe.gaussian_around(5),
-                    'fillout_factor@contact_envelope': phoebe.gaussian_around(0.4),
-                    'q@primary': phoebe.gaussian_around(0.2),
+                    'fillout_factor@contact_envelope': phoebe.gaussian_around(0.5),
+                    'q@primary': phoebe.gaussian_around(0.5),
                     'pblum@primary': phoebe.gaussian_around(0.2),
                     'sigmas_lnf@lc01': phoebe.uniform(-1e9, -1e4),
                    }, distribution='ball_around_guess')
+b.run_compute(compute='fastcompute', sample_from='ball_around_guess',
+                sample_num=10, model='init_from_model')
+_ = b.plot('lc01', x='phase', ls='-', model='init_from_model', show=True)
+
+# %%
+b['init_from'] = 'ball_around_guess'
+b.set_value('nwalkers', solver='emcee_solver', value=14)
+b.set_value('niters', solver='emcee_solver', value=500)
+
+b.run_solver('emcee_solver', solution='emcee_solution')
+print(b.adopt_solution(solution='emcee_solution', distribution='emcee_posteriors'))
+_ = b.plot_distribution_collection(distribution='emcee_posteriors', show=True)
+b.uncertainties_from_distribution_collection(distribution='emcee_posteriors', sigma=3, tex=False)
+
+# %%
+_ = b.plot(solution='emcee_solution', style='lnprobability',
+            burnin=100, thin=1, lnprob_cutoff=3600,
+            show=True)
+
+# We can fix the following if we know which values result in a nice chain
+b.set_value('burnin', 100)
+b.set_value('thin', 1)
+b.set_value('lnprob_cutoff', 3600)
+
+# %%
+# Show corner plot
+_ = b.plot(solution='emcee_solution', style='corner', show=True)
+
+# %%
+# Show corner plot with failed and rejected samples
+_ = b.plot(solution='emcee_solution', style='failed', show=True)
+
+# %%
+# Show history of each sampled parameter for all walkers
+_ = b.plot(solution='emcee_solution', style='trace', show=True)
+
+# %%
+b.run_compute(compute='fastcompute', sample_from='emcee_solution',
+                sample_num=20, model='emcee_sol_model')
+_ = b.plot('lc01', x='phase', ls='-', model='emcee_sol_model', show=True)
