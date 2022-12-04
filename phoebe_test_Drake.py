@@ -52,6 +52,7 @@ b.add_dataset('orb', compute_phases=orbphases, dataset='orb01')   # init empty o
 b.add_dataset('mesh', compute_phases=meshphases, dataset='mesh01', columns=['teffs'])   # init empty mesh dataset, expose teffs
 
 b.set_value_all('gravb_bol', 0.32)   # set gravity darkening = 0.32 for both stars since both are convective
+b.set_value_all('irrad_frac_refl_bol', 0.5)   # set surface albedo = 0.5
 b.set_value_all('pblum_mode', 'dataset-scaled')   # scale passband luminosity to dataset
 
 b.run_compute(model='default')
