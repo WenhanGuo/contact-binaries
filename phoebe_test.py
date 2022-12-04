@@ -6,11 +6,11 @@ import matplotlib.pyplot as plt
 import pandas as pd
 # %matplotlib widget
 from astropy.timeseries import TimeSeries
+from astropy.time import Time
 
 logger = phoebe.logger()
 
 b = phoebe.default_binary(contact_binary=True)
-
 
 # %%
 # Download csv from github, read into pandas
@@ -24,13 +24,26 @@ del df['time']
 
 # Convert to astropy TimeSeries
 ts = TimeSeries.from_pandas(df)
-
 MJD = ts['time'].mjd
 MJD = MJD - MJD[0]   # set MJD start from 0 for t0 argument
 MJD = MJD % 0.3439788   # fold time into delta time
-
 fluxes = 10**(-ts['diff_mag']/2.5 + 10)
 
+# ts1 = ts.loc['2022-11-06T04:11:20.000':'2022-11-06T09:11:24.000']
+# MJD1 = ts1['time'].mjd
+# MJD1 = MJD1 - MJD1[0]
+# MJD1 = MJD1 % 0.3439788
+# fluxes1 = 10**(-ts1['diff_mag']/2.5 + 10)
+
+# ts2 = ts.loc['2022-11-21T02:48:28.000':'2022-11-21T08:19:18.000']
+# MJD2 = ts2['time'].mjd
+# MJD2 = MJD2 - MJD2[0]
+# MJD2 = MJD2 % 0.3439788
+# fluxes2 = 10**(-ts2['diff_mag']/2.5 + 10)
+
+# plt.scatter(MJD1, fluxes1, s=0.5, c='blue')
+# plt.scatter(MJD2, fluxes2, s=0.5, c='crimson')
+# plt.scatter(MJD, fluxes, s=0.5, c='black')
 # %%
 b.add_dataset('mesh', compute_times=np.linspace(0,0.3439788,31), dataset='mesh01')
 b.add_dataset('lc', times=MJD, fluxes=fluxes, dataset='lc01')
@@ -44,6 +57,9 @@ b.set_value_all('ld_mode', 'lookup')
 b.set_value_all('ld_mode_bol', 'lookup')
 b.set_value_all('atm', 'ck2004')
 b.set_value('pblum_mode', 'dataset-scaled')
+
+b.set_value_all('gravb_bol', 0.32)
+b.set_value_all('irrad_frac_refl_bol', 0.5)
 
 b['period@binary'] = 0.3439788   # period = 0.34 day
 b['t0_supconj'] = 0.14   # primary eclipse time (zero phase) = 0.14 day
