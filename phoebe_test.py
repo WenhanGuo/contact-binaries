@@ -62,7 +62,7 @@ b['requiv@primary'] = 1.37
 print(b)
 
 # %%
-# b.run_compute(model='default')
+b.run_compute(model='default')
 _ = b.plot(x='times', show=True, size=0.0015)
 
 # %%
