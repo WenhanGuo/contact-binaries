@@ -17,7 +17,7 @@ b = phoebe.default_binary(contact_binary=True)
 # url = 'https://raw.githubusercontent.com/WenhanGuo/contact-binaries/master/diff_lc.csv'
 # df = pd.read_csv(url, delim_whitespace=True)
 
-url = 'https://raw.githubusercontent.com/WenhanGuo/contact-binaries/master/joined_ts_2nights.csv'
+url = 'https://raw.githubusercontent.com/WenhanGuo/contact-binaries/master/joined_ts_3nights.csv'
 df = pd.read_csv(url)
 df.set_index(pd.DatetimeIndex(df['time']), inplace=True)
 del df['time']
@@ -29,18 +29,18 @@ MJD = MJD - MJD[0]   # set MJD start from 0 for t0 argument
 MJD = MJD % 0.3439788   # fold time into delta time
 fluxes = 10**(-ts['diff_mag']/2.5 + 10)
 
-# ts1 = ts.loc['2022-11-06T04:11:20.000':'2022-11-06T09:11:24.000']
-# MJD1 = ts1['time'].mjd
-# MJD1 = MJD1 % 0.3439788
-# fluxes1 = 10**(-ts1['diff_mag']/2.5 + 10)
+ts1 = ts.loc['2022-11-06T04:11:20.000':'2022-11-06T09:11:24.000']
+MJD1 = ts1['time'].mjd
+MJD1 = MJD1 % 0.3439788
+fluxes1 = 10**(-ts1['diff_mag']/2.5 + 10)
 
-# ts2 = ts.loc['2022-11-21T02:48:28.000':'2022-11-21T08:19:18.000']
-# MJD2 = ts2['time'].mjd
-# MJD2 = MJD2 % 0.3439788
-# fluxes2 = 10**(-ts2['diff_mag']/2.5 + 10)
+ts2 = ts.loc['2022-11-21T02:48:28.000':'2022-11-21T08:19:18.000']
+MJD2 = ts2['time'].mjd
+MJD2 = MJD2 % 0.3439788
+fluxes2 = 10**(-ts2['diff_mag']/2.5 + 10)
 
-# plt.scatter(MJD1, fluxes1, s=0.5, c='blue')
-# plt.scatter(MJD2, fluxes2, s=0.5, c='crimson')
+plt.scatter(MJD1, fluxes1, s=0.5, c='blue')
+plt.scatter(MJD2, fluxes2+10**7.72, s=0.5, c='crimson')
 # plt.scatter(MJD, fluxes, s=0.5, c='black')
 # %%
 b.add_dataset('mesh', compute_times=np.linspace(0,0.3439788,31), dataset='mesh01')
@@ -76,8 +76,8 @@ b['requiv@primary'] = 1.37
 print(b)
 
 # %%
-b.run_compute(model='default')
-_ = b.plot(x='times', show=True, size=0.001)
+# b.run_compute(model='default')
+_ = b.plot(x='times', show=True, size=0.0015)
 
 # %%
 b.add_solver('estimator.lc_periodogram')
