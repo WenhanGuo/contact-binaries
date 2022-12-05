@@ -31,13 +31,11 @@ fluxes = 10**(-ts['diff_mag']/2.5 + 10)
 
 # ts1 = ts.loc['2022-11-06T04:11:20.000':'2022-11-06T09:11:24.000']
 # MJD1 = ts1['time'].mjd
-# MJD1 = MJD1 - MJD1[0]
 # MJD1 = MJD1 % 0.3439788
 # fluxes1 = 10**(-ts1['diff_mag']/2.5 + 10)
 
 # ts2 = ts.loc['2022-11-21T02:48:28.000':'2022-11-21T08:19:18.000']
 # MJD2 = ts2['time'].mjd
-# MJD2 = MJD2 - MJD2[0]
 # MJD2 = MJD2 % 0.3439788
 # fluxes2 = 10**(-ts2['diff_mag']/2.5 + 10)
 
