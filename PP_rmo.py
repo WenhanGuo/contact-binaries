@@ -123,10 +123,9 @@ def diff_phot(out_dir, refnum):
 
     return
 
-diff_phot('/Volumes/TMO_Data_4TB/cb_data/C01+13/20221106', 3)
-diff_phot('/Volumes/TMO_Data_4TB/cb_data/C01+13/20221119', 3)
-diff_phot('/Volumes/TMO_Data_4TB/cb_data/C01+13/20221120', 2)
-diff_phot('/Volumes/TMO_Data_4TB/cb_data/C01+13/20221121', 2)
+diff_phot('/Volumes/TMO_Data_4TB/cb_data/C01+13/20221106', 5)
+diff_phot('/Volumes/TMO_Data_4TB/cb_data/C01+13/20221120', 4)
+diff_phot('/Volumes/TMO_Data_4TB/cb_data/C01+13/20221121', 5)
 
 # %%
 # del ts[1448]
@@ -173,8 +172,73 @@ folded_ts = joined_ts.fold(period=0.3439788 * u.day)
 plt.scatter(folded_ts.time.jd, folded_ts['diff_mag'], c=folded_ts['color'], 
                         s=10, marker='x', alpha=1, linewidth=0.5)
 
-plt.ylim(2.9,2.2)
+plt.ylim(1.0,0.3)
 plt.savefig(obj_dir+'/test.pdf')
 
 
 # %%
+def diff_phot_ref(out_dir, refnum1, refnum2):
+    ref = TimeSeries.read(os.path.join(out_dir, 'norm_ref_flux.ecsv'), time_column='time')
+
+    ref['target_mag'] = -2.5 * np.log10(ref['ref_flux'][:,refnum1-1]) + 25
+    ref['ref_mag'] = -2.5 * np.log10(ref['ref_flux'][:,refnum2-1]) + 25
+
+    g_ref = ref[ref['filter'] == 'g']
+
+    fig, axes = plt.subplots(1, 2, figsize=(20,12))
+    axes[0].scatter(g_ref.time.datetime64, g_ref['target_mag'], label='target')
+    axes[0].scatter(g_ref.time.datetime64, g_ref['ref_mag'], label='ref1')
+
+    g_diff = (g_ref['target_mag']) - (g_ref['ref_mag'])
+    # g_diff = g_diff - np.mean(g_diff) .  # normalization is what causes problems in folding
+    g_ref['diff_mag'] = g_diff
+    g_ref.write(out_dir+'/diff_lc_ref.ecsv', overwrite=True)
+
+    axes[1].scatter(g_ref.time.datetime64, g_diff)
+    # axes[1].set_ylim(2.9, 2.3)
+
+    axes[0].legend()
+    axes[0].legend()
+    axes[0].legend()
+    axes[0].legend()
+    plt.tight_layout()
+    plt.savefig(out_dir+'/test_ref.pdf')
+
+    return
+
+diff_phot_ref('/Volumes/TMO_Data_4TB/cb_data/C01+13/20221106', 3, 5)
+diff_phot_ref('/Volumes/TMO_Data_4TB/cb_data/C01+13/20221120', 2, 4)
+diff_phot_ref('/Volumes/TMO_Data_4TB/cb_data/C01+13/20221121', 2, 5)
+
+# %%
+obj_dir = '/Volumes/TMO_Data_4TB/cb_data/C01+13'
+date_folders = glob1(obj_dir, '[0-9]*')
+# date_folders = ['20221106', '20221121']
+joined_ts = 1.0   # init value placeholder
+table = 'diff_lc_ref.ecsv'
+
+for date in date_folders:
+    ts = TimeSeries.read(os.path.join(obj_dir, date, table), time_column='time')
+    ts['obs_no'] = date
+    ts = ts['time', 'target_mag', 'ref_mag', 'diff_mag', 'obs_no']
+    if type(joined_ts) == float:
+        joined_ts = ts
+    else:
+        joined_ts = vstack([joined_ts, ts])
+
+dates = date_folders
+colors = ['tab:red', 'tab:green', 'tab:blue', 'k']
+joined_ts['color'] = 'placeholder'
+for row in joined_ts:
+    for i in range(len(dates)):
+        if row['obs_no'] == dates[i]:
+            row['color'] = colors[i]
+
+joined_ts.write(obj_dir+'/joined_ts_3nights_ref.csv', overwrite=True)
+folded_ts = joined_ts.fold(period=0.3439788 * u.day)
+
+plt.scatter(folded_ts.time.jd, folded_ts['diff_mag'], c=folded_ts['color'], 
+                        s=10, marker='x', alpha=1, linewidth=0.5)
+
+plt.ylim(-1.85,-2.1)
+plt.savefig(obj_dir+'/test_ref.pdf')
