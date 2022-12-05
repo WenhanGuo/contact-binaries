@@ -166,13 +166,13 @@ for row in joined_ts:
         if row['obs_no'] == dates[i]:
             row['color'] = colors[i]
 
-joined_ts.write(obj_dir+'/joined_ts_4nights.csv', overwrite=True)
+joined_ts.write(obj_dir+'/joined_ts_3nights.csv', overwrite=True)
 folded_ts = joined_ts.fold(period=0.3439788 * u.day)
 
 plt.scatter(folded_ts.time.jd, folded_ts['diff_mag'], c=folded_ts['color'], 
                         s=10, marker='x', alpha=1, linewidth=0.5)
 
-plt.ylim(1.0,0.3)
+plt.ylim(0.9,0.35)
 plt.savefig(obj_dir+'/test.pdf')
 
 
