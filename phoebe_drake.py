@@ -76,17 +76,18 @@ b.flip_constraint('teffratio', solve_for='teff@secondary')
 
 # if adopt all proposed params, uncomment below:
 b.flip_constraint('pot@contact_envelope', solve_for='requiv@primary')
-print(b.adopt_solution('ebai_knn_solution'))
+print(b.adopt_solution('ebai_knn_sol'))
 
 # if not adopting q, uncomment below:
 # print(b.adopt_solution('ebai_knn_sol', adopt_parameters=['t0_supconj','teffratio','incl']))
 
 # %%
 # forward model from adopted KNN solutions
-b.add_dataset('mesh', compute_phases=meshphases, dataset='mesh02', columns=['teffs'])
 b.run_compute(model='ebai_knn_model', overwrite=True)
+
+# %%
 b.plot('lc01', x='phase', ls='-', legend=True, show=True)
-b.plot('mesh02', fc='teffs', ec='None', fcmap='viridis', legend=True, animate=True, save='./cb_visu_drake/mesh_inverse_drake.gif')
+b.plot('mesh01', fc='teffs', ec='None', fcmap='viridis', legend=True, animate=True, save='./cb_visu_drake/mesh_inverse_drake.gif')
 
 # %%
 # nelder_mead optimizer run with 1000 iterations
