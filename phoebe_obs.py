@@ -10,7 +10,7 @@ b = phoebe.default_binary(contact_binary=True)
 
 # %%
 # Download csv from github, read into pandas
-url = 'https://raw.githubusercontent.com/WenhanGuo/contact-binaries/master/joined_ts_3nights.csv'
+url = 'https://raw.githubusercontent.com/WenhanGuo/contact-binaries/master/ts_3nights.csv'
 df = pd.read_csv(url)
 df.set_index(pd.DatetimeIndex(df['time']), inplace=True)
 del df['time']
