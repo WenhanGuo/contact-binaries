@@ -127,7 +127,7 @@ diff_phot('/Volumes/TMO_Data_4TB/cb_data/C01+13/20221121', 5)
 
 # %%
 # Outlier detection
-url = 'https://raw.githubusercontent.com/WenhanGuo/contact-binaries/master/joined_ts_3nights_copy.csv'
+url = 'https://raw.githubusercontent.com/WenhanGuo/contact-binaries/master/ts_3nights_fmt.csv'
 df = pd.read_csv(url)
 df['time'] = pd.to_datetime(df['time'])
 df['diff_mag'] = np.float64(df['diff_mag'])
@@ -145,12 +145,12 @@ outliers.to_csv('diff_lc_outliers.csv')
 
 # %%
 # Outlier rejection
-url = 'https://raw.githubusercontent.com/WenhanGuo/contact-binaries/master/joined_ts_3nights.csv'
+url = 'https://raw.githubusercontent.com/WenhanGuo/contact-binaries/master/ts_3nights.csv'
 df = pd.read_csv(url)
 df.set_index(pd.DatetimeIndex(df['time']), inplace=True)
 del df['time']
 
-url_out = 'https://raw.githubusercontent.com/WenhanGuo/contact-binaries/master/diff_lc_outliers.csv'
+url_out = 'https://raw.githubusercontent.com/WenhanGuo/contact-binaries/master/outliers.csv'
 out = pd.read_csv(url_out)
 out.set_index(pd.DatetimeIndex(out['time']), inplace=True)
 del out['time']

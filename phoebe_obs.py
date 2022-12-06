@@ -10,7 +10,7 @@ b = phoebe.default_binary(contact_binary=True)
 
 # %%
 # Download csv from github, read into pandas
-url = 'https://raw.githubusercontent.com/WenhanGuo/contact-binaries/master/joined_ts_3nights.csv'
+url = 'https://raw.githubusercontent.com/WenhanGuo/contact-binaries/master/ts_3nights.csv'
 df = pd.read_csv(url)
 df.set_index(pd.DatetimeIndex(df['time']), inplace=True)
 del df['time']
@@ -28,7 +28,7 @@ orbphases = phoebe.linspace(0,1,101)
 meshphases = phoebe.linspace(0,1,31)
 b.add_dataset('lc', times=MJD, fluxes=fluxes, dataset='lc01')
 b.add_dataset('orb', compute_phases=orbphases, dataset='orb01')
-b.add_dataset('mesh', compute_phases=meshphases, dataset='mesh01')
+b.add_dataset('mesh', compute_phases=meshphases, dataset='mesh01', columns=['teffs'])
 
 # %%
 # print(phoebe.list_online_passbands())
@@ -42,7 +42,7 @@ b.set_value_all('gravb_bol', 0.32)
 b.set_value_all('irrad_frac_refl_bol', 0.5)
 
 b['period@binary'] = 0.3439788   # period = 0.34 day
-b['t0_supconj'] = 0.14   # primary eclipse time (zero phase) = 0.14 day
+b['t0_supconj'] = 0.14
 b['incl@binary'] = 89.6
 b['Av'] = 0.179
 
@@ -63,10 +63,10 @@ b.run_compute(model='default')
 
 # %%
 # simple plotting
-b.plot('lc01', x='phase', size=0.012, legend=True, show=True, save='./cb_visu_obs/lc.png')   # plot lc data and forward model
+b.plot('lc01', x='phase', ylim=(0.4*10**10,0.8*10**10), s=0.008, legend=True, show=True, save='./cb_visu_obs/lc.png')   # plot lc data and forward model
 b.plot('mesh01', phase=0, legend=True, fc='teffs', ec='None', fcmap='viridis', show=True)   # plot mesh w/ temp color @t0
 # animations
-b.plot(y={'orb':'ws'}, size=0.01, fc={'mesh':'teffs'}, ec={'mesh':'None'}, 
+b.plot(y={'orb':'ws'}, ylim={'lc':(0.4*10**10,0.8*10**10)}, size=0.008, fc={'mesh':'teffs'}, ec={'mesh':'None'}, 
         fcmap='viridis', animate=True, save='./cb_visu_obs/animations_sync.gif')   # sync animation for lc, orb, mesh
 b.plot('orb01', y='ws', legend=True, animate=True, save='./cb_visu_obs/orb2d.gif')   # animate face-on 2d orbit
 b.plot('orb01', projection='3d', legend=True, animate=True, save='./cb_visu_obs/orb3d.gif')   # animate 3d orbit
@@ -79,7 +79,7 @@ b.plot('mesh01', fc='teffs', ec='None', fcmap='viridis', legend=True, animate=Tr
 # %%
 # start of inverse problem: add and run KNN estimator
 b.add_solver('estimator.ebai', ebai_method='knn', solver='ebai_knn', overwrite=True)
-b.run_solver('ebai_knn', solution='ebai_knn_solution', phase_bin=False)
+b.run_solver('ebai_knn', solution='ebai_knn_sol', phase_bin=False)
 print(b.adopt_solution('ebai_knn_sol', trial_run=True))   # see proposed KNN solution params before adopting
 
 # %%
@@ -87,16 +87,22 @@ b.flip_constraint('teffratio', solve_for='teff@secondary')
 
 # if adopt all proposed params, uncomment below:
 b.flip_constraint('pot@contact_envelope', solve_for='requiv@primary')
-print(b.adopt_solution('ebai_knn_solution'))
+print(b.adopt_solution('ebai_knn_sol'))
 
 # if not adopting q, uncomment below:
-# print(b.adopt_solution('ebai_knn_sol', adopt_parameters=['t0_supconj','teffratio','incl']))
+# print(b.adopt_solution('ebai_knn_sol', adopt_parameters=['t0_supconj', 'teffratio', 'incl']))
 
 # %%
-b.add_dataset('mesh', compute_phases=meshphases, dataset='mesh02', columns=['teffs'])
 b.run_compute(model='ebai_knn_model', overwrite=True)
-b.plot('lc01', x='phase', ls='-', legend=True, show=True)
-b.plot('mesh02', fc='teffs', ec='None', fcmap='viridis', legend=True, animate=True, save='./cb_visu_obs/mesh_inverse_obs.gif')
+
+# %%
+b.plot('lc01', x='phase', ylim=(0.4*10**10,0.8*10**10), ls='-', s=0.008, legend=True, show=True, save='./cb_visu_obs/lc_inverse_obs.png')
+b.plot('mesh01', fc='teffs', ec='None', fcmap='viridis', legend=True, animate=True, save='./cb_visu_obs/mesh_inverse_obs.gif')
+b.plot(y={'orb':'ws'}, ylim={'lc':(0.4*10**10,0.8*10**10)}, size=0.008, fc={'mesh':'teffs'}, ec={'mesh':'None'}, 
+        fcmap='viridis', animate=True, save='./cb_visu_obs/animations_sync_inverse_obs.gif')
+b.plot('orb01', y='ws', legend=True, animate=True, save='./cb_visu_obs/orb2d_inverse_obs.gif')
+b.plot('orb01', projection='3d', legend=True, animate=True, save='./cb_visu_obs/orb3d_inverse_obs.gif')
+b.plot('mesh01', fc='teffs', ec='None', fcmap='viridis', legend=True, animate=True, save='./cb_visu_obs/mesh_inverse_obs.gif')
 
 # %%
 b.add_solver('optimizer.nelder_mead', 
