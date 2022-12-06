@@ -1,22 +1,15 @@
 # %%
 import phoebe
-from phoebe import u # units
 import numpy as np
 import matplotlib.pyplot as plt
 import pandas as pd
-# %matplotlib widget
 from astropy.timeseries import TimeSeries
-from astropy.time import Time
 
 logger = phoebe.logger()
-
 b = phoebe.default_binary(contact_binary=True)
 
 # %%
 # Download csv from github, read into pandas
-# url = 'https://raw.githubusercontent.com/WenhanGuo/contact-binaries/master/diff_lc.csv'
-# df = pd.read_csv(url, delim_whitespace=True)
-
 url = 'https://raw.githubusercontent.com/WenhanGuo/contact-binaries/master/joined_ts_3nights.csv'
 df = pd.read_csv(url)
 df.set_index(pd.DatetimeIndex(df['time']), inplace=True)
@@ -27,21 +20,24 @@ ts = TimeSeries.from_pandas(df)
 MJD = ts['time'].mjd
 MJD = MJD - MJD[0]   # set MJD start from 0 for t0 argument
 MJD = MJD % 0.3439788   # fold time into delta time
+
 fluxes = 10**(-ts['diff_mag']/2.5 + 10)
+
 # %%
-b.add_dataset('mesh', compute_times=np.linspace(0,0.3439788,31), dataset='mesh01')
+orbphases = phoebe.linspace(0,1,101)
+meshphases = phoebe.linspace(0,1,31)
 b.add_dataset('lc', times=MJD, fluxes=fluxes, dataset='lc01')
-b.add_dataset('orb', compute_times=np.linspace(0,0.3439788,101), dataset='orb01')
+b.add_dataset('orb', compute_phases=orbphases, dataset='orb01')
+b.add_dataset('mesh', compute_phases=meshphases, dataset='mesh01')
 
 # %%
-print(phoebe.list_online_passbands())
+# print(phoebe.list_online_passbands())
 b.set_value('passband', 'SDSS:g')
-
 b.set_value_all('ld_mode', 'lookup')
 b.set_value_all('ld_mode_bol', 'lookup')
 b.set_value_all('atm', 'ck2004')
-b.set_value('pblum_mode', 'dataset-scaled')
 
+b.set_value('pblum_mode', 'dataset-scaled')
 b.set_value_all('gravb_bol', 0.32)
 b.set_value_all('irrad_frac_refl_bol', 0.5)
 
@@ -59,30 +55,48 @@ b['q'] = 0.110
 
 b['requiv@primary'] = 1.37
 
+print(b.run_checks())   # check if run_compute is possible
 print(b)
 
 # %%
 b.run_compute(model='default')
-_ = b.plot(x='times', show=True, size=0.0015)
 
 # %%
-b.add_solver('estimator.lc_periodogram')
-b.run_solver(kind='lc_periodogram', lc_datasets='lc01')
+# simple plotting
+b.plot('lc01', x='phase', size=0.012, legend=True, show=True, save='./cb_visu_obs/lc.png')   # plot lc data and forward model
+b.plot('mesh01', phase=0, legend=True, fc='teffs', ec='None', fcmap='viridis', show=True)   # plot mesh w/ temp color @t0
+# animations
+b.plot(y={'orb':'ws'}, size=0.01, fc={'mesh':'teffs'}, ec={'mesh':'None'}, 
+        fcmap='viridis', animate=True, save='./cb_visu_obs/animations_sync.gif')   # sync animation for lc, orb, mesh
+b.plot('orb01', y='ws', legend=True, animate=True, save='./cb_visu_obs/orb2d.gif')   # animate face-on 2d orbit
+b.plot('orb01', projection='3d', legend=True, animate=True, save='./cb_visu_obs/orb3d.gif')   # animate 3d orbit
+b.plot('mesh01', fc='teffs', ec='None', fcmap='viridis', legend=True, animate=True, save='./cb_visu_obs/mesh.gif')   # animate mesh
 
 # %%
+# b.add_solver('estimator.lc_periodogram')
+# b.run_solver(kind='lc_periodogram', lc_datasets='lc01')
+
+# %%
+# start of inverse problem: add and run KNN estimator
 b.add_solver('estimator.ebai', ebai_method='knn', solver='ebai_knn', overwrite=True)
 b.run_solver('ebai_knn', solution='ebai_knn_solution', phase_bin=False)
+print(b.adopt_solution('ebai_knn_sol', trial_run=True))   # see proposed KNN solution params before adopting
 
 # %%
 b.flip_constraint('teffratio', solve_for='teff@secondary')
-b.flip_constraint('pot@contact_envelope', solve_for='requiv@primary')
 
+# if adopt all proposed params, uncomment below:
+b.flip_constraint('pot@contact_envelope', solve_for='requiv@primary')
 print(b.adopt_solution('ebai_knn_solution'))
+
+# if not adopting q, uncomment below:
 # print(b.adopt_solution('ebai_knn_sol', adopt_parameters=['t0_supconj','teffratio','incl']))
 
 # %%
+b.add_dataset('mesh', compute_phases=meshphases, dataset='mesh02', columns=['teffs'])
 b.run_compute(model='ebai_knn_model', overwrite=True)
-_ = b.plot('lc01', x='phase', ls='-', legend=True, show=True)
+b.plot('lc01', x='phase', ls='-', legend=True, show=True)
+b.plot('mesh02', fc='teffs', ec='None', fcmap='viridis', legend=True, animate=True, save='./cb_visu_obs/mesh_inverse_obs.gif')
 
 # %%
 b.add_solver('optimizer.nelder_mead', 
@@ -104,7 +118,7 @@ b.add_distribution({'t0_supconj': phoebe.gaussian_around(0.01),
                    }, distribution='ball_around_guess')
 b.run_compute(compute='fastcompute', sample_from='ball_around_guess',
                 sample_num=10, model='init_from_model')
-_ = b.plot('lc01', x='phase', ls='-', model='init_from_model', show=True)
+b.plot('lc01', x='phase', ls='-', model='init_from_model', show=True)
 
 # %%
 b['init_from'] = 'ball_around_guess'
@@ -113,11 +127,11 @@ b.set_value('niters', solver='emcee_solver', value=500)
 
 b.run_solver('emcee_solver', solution='emcee_solution')
 print(b.adopt_solution(solution='emcee_solution', distribution='emcee_posteriors'))
-_ = b.plot_distribution_collection(distribution='emcee_posteriors', show=True)
+b.plot_distribution_collection(distribution='emcee_posteriors', show=True)
 b.uncertainties_from_distribution_collection(distribution='emcee_posteriors', sigma=3, tex=False)
 
 # %%
-_ = b.plot(solution='emcee_solution', style='lnprobability',
+b.plot(solution='emcee_solution', style='lnprobability',
             burnin=100, thin=1, lnprob_cutoff=3600,
             show=True)
 
@@ -128,17 +142,17 @@ b.set_value('lnprob_cutoff', 3600)
 
 # %%
 # Show corner plot
-_ = b.plot(solution='emcee_solution', style='corner', show=True)
+b.plot(solution='emcee_solution', style='corner', show=True)
 
 # %%
 # Show corner plot with failed and rejected samples
-_ = b.plot(solution='emcee_solution', style='failed', show=True)
+b.plot(solution='emcee_solution', style='failed', show=True)
 
 # %%
 # Show history of each sampled parameter for all walkers
-_ = b.plot(solution='emcee_solution', style='trace', show=True)
+b.plot(solution='emcee_solution', style='trace', show=True)
 
 # %%
 b.run_compute(compute='fastcompute', sample_from='emcee_solution',
                 sample_num=20, model='emcee_sol_model')
-_ = b.plot('lc01', x='phase', ls='-', model='emcee_sol_model', show=True)
+b.plot('lc01', x='phase', ls='-', model='emcee_sol_model', show=True)
