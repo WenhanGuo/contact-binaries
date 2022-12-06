@@ -21,7 +21,7 @@ MJD = np.array(df['MJD'])
 MJD = MJD - MJD[0]   # set MJD start from 0 for t0 argument
 MJD = MJD % 0.3439788   # fold time into delta time
 
-fluxes = 10 ** (-np.array(df['Mag']) + 25)   # obtain flux from mag
+fluxes = 10 ** (-np.array(df['Mag'])/2.5 + 10)   # obtain flux from mag
 
 
 # %%
