@@ -12,13 +12,15 @@ from astropy.timeseries import TimeSeries
 from astropy.table import vstack
 import matplotlib.pyplot as plt
 
+import pandas as pd
+import numpy as np
+from pycaret.anomaly import *
+
+import astropy.units as u
+
 directory = '/Volumes/TMO_Data_4TB/cb_data/C01+13/20221121/aligned'
-
 cubelist = sorted(glob1(directory, '*.fits'))
-
 out_dir = '/Volumes/TMO_Data_4TB/cb_data/C01+13/20221121'
-
-
 
 # %%
 hdulist = fits.open(os.path.join(directory, cubelist[0]))
@@ -26,7 +28,6 @@ hdu = hdulist[0]
 # img = hdu.data[0]
 img = hdu.data
 wcs = WCS(hdu.header, naxis=2)
-
 
 RA_Dec = '01h18m48.5395s +13d21m07.62s'
 target_sky_aperture, target_sky_annulus = sky_aperture_from_RADec(wcs=wcs, RA_Dec=RA_Dec, 
@@ -61,15 +62,12 @@ for cubename in cubelist:
 normalize_target_table(directory=out_dir, target_table='target_flux.ecsv')
 normalize_ref_table(directory=out_dir, ref_table='ref_flux.ecsv')
 
-
 # %%
 table, RFM = LCs_visualizer(directory=out_dir, visu_dir=out_dir, 
                                     mode='full', layout=[3,5])
 
-
 # %%
 reflist = [1, 2]
-
 diff_lc_name = os.path.join(out_dir, 'diff_lc.ecsv')
 
 diff_lc = differential_photometry(directory=out_dir, reflist=reflist)
@@ -128,18 +126,53 @@ diff_phot('/Volumes/TMO_Data_4TB/cb_data/C01+13/20221120', 4)
 diff_phot('/Volumes/TMO_Data_4TB/cb_data/C01+13/20221121', 5)
 
 # %%
-# del ts[1448]
-# del ts[1449]
-ts['diff_mag'] = g_diff
+# Outlier detection
+url = 'https://raw.githubusercontent.com/WenhanGuo/contact-binaries/master/joined_ts_3nights_copy.csv'
+df = pd.read_csv(url)
+df['time'] = pd.to_datetime(df['time'])
+df['diff_mag'] = np.float64(df['diff_mag'])
+df['avg_mag'] = df['diff_mag'].rolling(6).mean()
+
+df.drop('avg_mag', axis=1, inplace=True)
+df.set_index(df['time'], drop=True, inplace=True)
+
+s = setup(df, session_id=123)
+iforest = create_model('iforest', fraction=0.3)
+iforest_results = assign_model(iforest)
+
+outliers = iforest_results[iforest_results['Anomaly'] == 1]
+outliers.to_csv('diff_lc_outliers.csv')
+
+# %%
+# Outlier rejection
+url = 'https://raw.githubusercontent.com/WenhanGuo/contact-binaries/master/joined_ts_3nights.csv'
+df = pd.read_csv(url)
+df.set_index(pd.DatetimeIndex(df['time']), inplace=True)
+del df['time']
+
+url_out = 'https://raw.githubusercontent.com/WenhanGuo/contact-binaries/master/diff_lc_outliers.csv'
+out = pd.read_csv(url_out)
+out.set_index(pd.DatetimeIndex(out['time']), inplace=True)
+del out['time']
+del out['Anomaly']
+del out['Anomaly_Score']
+out = out.loc[:, ~out.columns.str.contains('^Unnamed')]
+
+df = pd.concat([df, out])
+df = df[~df.index.duplicated(keep=False)]
+ts = TimeSeries.from_pandas(df)
+
+# %%
 ts['diff_mag'] = ts['diff_mag'] - np.mean(ts['diff_mag'])
 ts_folded = ts.fold(period=0.3439788 * u.day)
 del ts_folded['filter']
+del ts_folded['color']
 
 from astropy.timeseries import aggregate_downsample
 ts_binned = aggregate_downsample(ts_folded, time_bin_size=60 * u.s)
 fig, ax = plt.subplots(1,1, figsize=(12,10))
 plt.scatter(ts_folded.time.jd, ts_folded['diff_mag'])
-plt.plot(ts_binned.time_bin_start.jd, ts_binned['diff_mag'], 'r-', drawstyle='steps-post')
+plt.scatter(ts_binned.time_bin_start.jd, ts_binned['diff_mag'], c='r', marker='x')
 plt.ylim(0.3,-0.3)
 plt.savefig(out_dir+'/60bin.pdf')
 
