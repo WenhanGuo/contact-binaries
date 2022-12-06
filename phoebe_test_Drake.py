@@ -59,14 +59,14 @@ b.run_compute(model='default')
 
 # %%
 # simple plotting
-b.plot('lc01', x='phase', size=0.012, legend=True, show=True, save='./visu/lc.png')   # plot lc data and forward model
+b.plot('lc01', x='phase', size=0.012, legend=True, show=True, save='./cb_visu/lc.png')   # plot lc data and forward model
 b.plot('mesh01', phase=0, legend=True, fc='teffs', ec='None', fcmap='inferno', show=True)   # plot mesh w/ temp color @t0
 # animations
 b.plot(y={'orb':'ws'}, size=0.01, fc={'mesh':'teffs'}, ec={'mesh':'None'}, 
-        fcmap='inferno', animate=True, save='./visu/animations_1.gif')   # sync animation for lc, orb, mesh
-b.plot('orb01', y='ws', legend=True, animate=True, save='./visu/orb2d.gif')   # animate face-on 2d orbit
-b.plot('orb01', projection='3d', legend=True, animate=True, save='./visu/orb3d.gif')   # animate 3d orbit
-b.plot('mesh01', fc='teffs', ec='None', fcmap='inferno', legend=True, animate=True, save='./visu/mesh.gif')   # animate mesh
+        fcmap='inferno', animate=True, save='./cb_visu/animations_1.gif')   # sync animation for lc, orb, mesh
+b.plot('orb01', y='ws', legend=True, animate=True, save='./cb_visu/orb2d.gif')   # animate face-on 2d orbit
+b.plot('orb01', projection='3d', legend=True, animate=True, save='./cb_visu/orb3d.gif')   # animate 3d orbit
+b.plot('mesh01', fc='teffs', ec='None', fcmap='inferno', legend=True, animate=True, save='./cb_visu/mesh.gif')   # animate mesh
 
 # %%
 # start of inverse problem: add and run KNN estimator
