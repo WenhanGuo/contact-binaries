@@ -25,7 +25,7 @@ fluxes = 10**(-ts['diff_mag']/2.5 + 10)
 
 # %%
 orbphases = phoebe.linspace(0,1,101)
-meshphases = phoebe.linspace(0,1,31)
+meshphases = phoebe.linspace(0,1,51)
 b.add_dataset('lc', times=MJD, fluxes=fluxes, dataset='lc01')
 b.add_dataset('orb', compute_phases=orbphases, dataset='orb01')
 b.add_dataset('mesh', compute_phases=meshphases, dataset='mesh01', columns=['teffs'])
@@ -97,12 +97,12 @@ b.run_compute(model='ebai_knn_model', overwrite=True)
 
 # %%
 b.plot('lc01', x='phase', ylim=(0.4*10**10,0.8*10**10), ls='-', s=0.008, legend=True, show=True, save='./cb_visu_obs/lc_inverse_obs.png')
-b.plot('mesh01', fc='teffs', ec='None', fcmap='viridis', legend=True, animate=True, save='./cb_visu_obs/mesh_inverse_obs.gif')
+b.plot('mesh01', fc='teffs', ec='None', fcmap='viridis', animate=True, save='./cb_visu_obs/mesh_inverse_obs.gif')
 b.plot(y={'orb':'ws'}, ylim={'lc':(0.4*10**10,0.8*10**10)}, size=0.008, fc={'mesh':'teffs'}, ec={'mesh':'None'}, 
         fcmap='viridis', animate=True, save='./cb_visu_obs/animations_sync_inverse_obs.gif')
 b.plot('orb01', y='ws', legend=True, animate=True, save='./cb_visu_obs/orb2d_inverse_obs.gif')
 b.plot('orb01', projection='3d', legend=True, animate=True, save='./cb_visu_obs/orb3d_inverse_obs.gif')
-b.plot('mesh01', fc='teffs', ec='None', fcmap='viridis', legend=True, animate=True, save='./cb_visu_obs/mesh_inverse_obs.gif')
+b.plot('mesh01', fc='teffs', ec='None', fcmap='viridis', animate=True, save='./cb_visu_obs/mesh_inverse_obs.gif')
 
 # %%
 b.add_solver('optimizer.nelder_mead', 
