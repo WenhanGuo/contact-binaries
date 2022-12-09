@@ -564,21 +564,22 @@ def fold_lc(obj_dir, table='diff_lc.ecsv'):
 
 
 
-def detect_outliers(url_fmt):
+def detect_outliers(url, fraction):
     """
     Outlier detection for smoothing.
-    url_fmt['time] must be of format 'yyyy-mm-dd HH:MM:SS.000'.
+    fraction: fraction of data set that wants to be identified as outliers.
     """
-    df = pd.read_csv(url_fmt)
-    df['time'] = pd.to_datetime(df['time'])
+    df = pd.read_csv(url)
+    df.set_index(pd.DatetimeIndex(df['time']), inplace=True)
+    df.drop(['time'], axis=1)
+
     df['diff_mag'] = np.float64(df['diff_mag'])
     df['avg_mag'] = df['diff_mag'].rolling(6).mean()
     
     df.drop('avg_mag', axis=1, inplace=True)
-    df.set_index(df['time'], drop=True, inplace=True)
     
     s = setup(df, session_id=123)
-    iforest = create_model('iforest', fraction=0.3)
+    iforest = create_model('iforest', fraction=fraction)
     iforest_results = assign_model(iforest)
     
     outliers = iforest_results[iforest_results['Anomaly'] == 1]
@@ -595,11 +596,11 @@ def reject_outliers(url, url_out='outliers.csv'):
     """
     df = pd.read_csv(url)
     df.set_index(pd.DatetimeIndex(df['time']), inplace=True)
-    df = df.drop(['time'], axis=1)
+    df = df.drop(columns=['time'])
     
     df_out = pd.read_csv(url_out)
-    df_out.set_index(pd.DatetimeIndex(out['time']), inplace=True)
-    df_out = df_out.drop(['time', 'Anomaly', 'Anomaly_Score'], axis=1)
+    df_out.set_index(pd.DatetimeIndex(df_out['time']), inplace=True)
+    df_out = df_out.drop(columns=['time', 'Anomaly', 'Anomaly_Score'])
     df_out = df_out.loc[:, ~df_out.columns.str.contains('^Unnamed')]
     
     df = pd.concat([df, df_out])
@@ -616,7 +617,7 @@ def bin_lc(out_dir, ts):
     """
     ts['diff_mag'] = ts['diff_mag'] - np.mean(ts['diff_mag'])
     ts_folded = ts.fold(period=0.3439788 * u.day)
-    ts_folded.drop(['filter', 'color'], axis=1)
+    del ts_folded['filter', 'color']
     
     ts_binned = aggregate_downsample(ts_folded, time_bin_size=60 * u.s)
     fig, ax = plt.subplots(1,1, figsize=(12,10))
