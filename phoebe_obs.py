@@ -108,6 +108,11 @@ b.plot('mesh01', fc='teffs', ec='None', fcmap='viridis', legend=True, animate=Tr
 b.add_solver('optimizer.nelder_mead', 
             fit_parameters=['teffratio', 'incl@binary', 'q', 'per0'], solver='nm_solver')
 b.run_solver('nm_solver', maxiter=10000, solution='nm_sol')
+print(b.adopt_solution('nm_sol', trial_run=True)
+
+# %%
+print(b.adopt_solution('nm_sol')
+b.run_compute(compute='fastcompute', model='after_nm')
 
 # %%
 b.add_solver('sampler.emcee', solver='emcee_solver')
