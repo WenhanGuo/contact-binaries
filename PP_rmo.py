@@ -117,61 +117,6 @@ diff_phot('/Volumes/TMO_Data_4TB/cb_data/C01+13/20221120', 4)
 diff_phot('/Volumes/TMO_Data_4TB/cb_data/C01+13/20221121', 5)
 
 # %%
-# Outlier detection
-url = 'https://raw.githubusercontent.com/WenhanGuo/contact-binaries/master/ts_3nights_fmt.csv'
-df = pd.read_csv(url)
-df['time'] = pd.to_datetime(df['time'])
-df['diff_mag'] = np.float64(df['diff_mag'])
-df['avg_mag'] = df['diff_mag'].rolling(6).mean()
-
-df.drop('avg_mag', axis=1, inplace=True)
-df.set_index(df['time'], drop=True, inplace=True)
-
-s = setup(df, session_id=123)
-iforest = create_model('iforest', fraction=0.3)
-iforest_results = assign_model(iforest)
-
-outliers = iforest_results[iforest_results['Anomaly'] == 1]
-outliers.to_csv('diff_lc_outliers.csv')
-
-# %%
-# Outlier rejection
-url = 'https://raw.githubusercontent.com/WenhanGuo/contact-binaries/master/ts_3nights.csv'
-df = pd.read_csv(url)
-df.set_index(pd.DatetimeIndex(df['time']), inplace=True)
-del df['time']
-
-url_out = 'https://raw.githubusercontent.com/WenhanGuo/contact-binaries/master/outliers.csv'
-out = pd.read_csv(url_out)
-out.set_index(pd.DatetimeIndex(out['time']), inplace=True)
-del out['time']
-del out['Anomaly']
-del out['Anomaly_Score']
-out = out.loc[:, ~out.columns.str.contains('^Unnamed')]
-
-df = pd.concat([df, out])
-df = df[~df.index.duplicated(keep=False)]
-ts = TimeSeries.from_pandas(df)
-
-# %%
-ts['diff_mag'] = ts['diff_mag'] - np.mean(ts['diff_mag'])
-ts_folded = ts.fold(period=0.3439788 * u.day)
-# del ts_folded['filter']
-# del ts_folded['color']
-
-ts_binned = aggregate_downsample(ts_folded, time_bin_size=60 * u.s)
-fig, ax = plt.subplots(1,1, figsize=(12,10))
-plt.scatter(ts_folded.time.jd, ts_folded['diff_mag'], c='k')
-plt.scatter(ts_binned.time_bin_start.jd, ts_binned['diff_mag'], c='r', marker='x')
-plt.ylim(0.3,-0.3)
-plt.savefig(out_dir+'/lc_60bin.pdf')
-
-
-
-
-
-# %%
-
 def detect_outliers(url, fraction):
     """
     Outlier detection for smoothing.
@@ -195,7 +140,7 @@ def detect_outliers(url, fraction):
 
     return
 
-def reject_outliers(url, url_out='outliers.csv'):
+def reject_outliers(url, url_out):
     """
     Outlier rejection for smoothing. url_out: outliers.csv output from detect_outliers.
     url['time] and url_out['time] must be of format 'yyyy-mm-ddTHH:MM:SS.000'.
@@ -215,8 +160,6 @@ def reject_outliers(url, url_out='outliers.csv'):
 
     return ts
 
-
-
 def bin_lc(out_dir, ts):
     """
     Fold and bin light curve.
@@ -230,7 +173,7 @@ def bin_lc(out_dir, ts):
     plt.scatter(ts_folded.time.jd, ts_folded['diff_mag'], c='k')
     plt.scatter(ts_binned.time_bin_start.jd, ts_binned['diff_mag'], c='crimson', marker='x')
     plt.ylim(0.3,-0.3)
-    plt.savefig(out_dir+'/lc_binned.pdf')
+    plt.savefig(out_dir+'/lc_binned.png')
 
     return
 

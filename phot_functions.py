@@ -567,6 +567,7 @@ def fold_lc(obj_dir, table='diff_lc.ecsv'):
 def detect_outliers(url, fraction):
     """
     Outlier detection for smoothing.
+    url: differential photometry csv file with 'time' column of format='yyyy-mm-ddTHH:MM:SS.000'.
     fraction: fraction of data set that wants to be identified as outliers.
     """
     df = pd.read_csv(url)
@@ -589,7 +590,7 @@ def detect_outliers(url, fraction):
 
 
 
-def reject_outliers(url, url_out='outliers.csv'):
+def reject_outliers(url, url_out):
     """
     Outlier rejection for smoothing. url_out: outliers.csv output from detect_outliers.
     url['time] and url_out['time] must be of format 'yyyy-mm-ddTHH:MM:SS.000'.
@@ -624,7 +625,7 @@ def bin_lc(out_dir, ts):
     plt.scatter(ts_folded.time.jd, ts_folded['diff_mag'], c='k')
     plt.scatter(ts_binned.time_bin_start.jd, ts_binned['diff_mag'], c='crimson', marker='x')
     plt.ylim(0.3,-0.3)
-    plt.savefig(out_dir+'/lc_binned.pdf')
+    plt.savefig(out_dir+'/lc_binned.png')
 
     return
 
