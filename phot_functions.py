@@ -584,6 +584,8 @@ def detect_outliers(url_fmt):
     outliers = iforest_results[iforest_results['Anomaly'] == 1]
     outliers.to_csv('outliers.csv')
 
+    return
+
 
 
 def reject_outliers(url, url_out='outliers.csv'):
@@ -622,6 +624,8 @@ def bin_lc(out_dir, ts):
     plt.scatter(ts_binned.time_bin_start.jd, ts_binned['diff_mag'], c='crimson', marker='x')
     plt.ylim(0.3,-0.3)
     plt.savefig(out_dir+'/lc_binned.pdf')
+
+    return
 
 
 # %%
