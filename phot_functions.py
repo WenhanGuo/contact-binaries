@@ -8,7 +8,7 @@ from astropy.wcs import WCS
 from astropy.coordinates import SkyCoord
 from astropy.stats import SigmaClip, sigma_clipped_stats, gaussian_fwhm_to_sigma
 from astropy.convolution import Gaussian2DKernel, convolve
-from astropy.timeseries import TimeSeries
+from astropy.timeseries import TimeSeries, aggregate_downsample
 from astropy.table import vstack, Table
 import astropy.units as u
 
@@ -18,6 +18,10 @@ from photutils.background import Background2D, SExtractorBackground
 from photutils.segmentation import detect_sources, deblend_sources, SourceCatalog
 from photutils.aperture import CircularAperture, CircularAnnulus, ApertureStats
 from scipy.signal import savgol_filter
+from pycaret.anomaly import *
+
+import pandas as pd
+import numpy as np
 
 from visu_functions import *
 
@@ -560,15 +564,64 @@ def fold_lc(obj_dir, table='diff_lc.ecsv'):
 
 
 
+def detect_outliers(url_fmt):
+    """
+    Outlier detection for smoothing.
+    url_fmt['time] must be of format 'yyyy-mm-dd HH:MM:SS.000'.
+    """
+    df = pd.read_csv(url_fmt)
+    df['time'] = pd.to_datetime(df['time'])
+    df['diff_mag'] = np.float64(df['diff_mag'])
+    df['avg_mag'] = df['diff_mag'].rolling(6).mean()
+    
+    df.drop('avg_mag', axis=1, inplace=True)
+    df.set_index(df['time'], drop=True, inplace=True)
+    
+    s = setup(df, session_id=123)
+    iforest = create_model('iforest', fraction=0.3)
+    iforest_results = assign_model(iforest)
+    
+    outliers = iforest_results[iforest_results['Anomaly'] == 1]
+    outliers.to_csv('outliers.csv')
 
 
 
+def reject_outliers(url, url_out='outliers.csv'):
+    """
+    Outlier rejection for smoothing. url_out: outliers.csv output from detect_outliers.
+    url['time] and url_out['time] must be of format 'yyyy-mm-ddTHH:MM:SS.000'.
+    """
+    df = pd.read_csv(url)
+    df.set_index(pd.DatetimeIndex(df['time']), inplace=True)
+    df = df.drop(['time'], axis=1)
+    
+    df_out = pd.read_csv(url_out)
+    df_out.set_index(pd.DatetimeIndex(out['time']), inplace=True)
+    df_out = df_out.drop(['time', 'Anomaly', 'Anomaly_Score'], axis=1)
+    df_out = df_out.loc[:, ~df_out.columns.str.contains('^Unnamed')]
+    
+    df = pd.concat([df, df_out])
+    df = df[~df.index.duplicated(keep=False)]
+    ts = TimeSeries.from_pandas(df)
+
+    return ts
 
 
 
-
-
-
+def bin_lc(out_dir, ts):
+    """
+    Fold and bin light curve.
+    """
+    ts['diff_mag'] = ts['diff_mag'] - np.mean(ts['diff_mag'])
+    ts_folded = ts.fold(period=0.3439788 * u.day)
+    ts_folded.drop(['filter', 'color'], axis=1)
+    
+    ts_binned = aggregate_downsample(ts_folded, time_bin_size=60 * u.s)
+    fig, ax = plt.subplots(1,1, figsize=(12,10))
+    plt.scatter(ts_folded.time.jd, ts_folded['diff_mag'], c='k')
+    plt.scatter(ts_binned.time_bin_start.jd, ts_binned['diff_mag'], c='crimson', marker='x')
+    plt.ylim(0.3,-0.3)
+    plt.savefig(out_dir+'/lc_binned.pdf')
 
 
 # %%
