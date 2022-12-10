@@ -564,13 +564,13 @@ def fold_lc(obj_dir, table='diff_lc.ecsv'):
 
 
 
-def detect_outliers(url, fraction):
+def reject_outliers(directory, table, fraction):
     """
-    Outlier detection for smoothing.
-    url: differential photometry csv file with 'time' column of format='yyyy-mm-ddTHH:MM:SS.000'.
+    Outlier detection and rejection.
+    table: differential photometry csv file with 'time' column of format='yyyy-mm-ddTHH:MM:SS.000'.
     fraction: fraction of data set that wants to be identified as outliers.
     """
-    df = pd.read_csv(url)
+    df = pd.read_csv(table)
     df.set_index(pd.DatetimeIndex(df['time']), inplace=True)
     df.drop(['time'], axis=1)
 
@@ -584,50 +584,99 @@ def detect_outliers(url, fraction):
     iforest_results = assign_model(iforest)
     
     outliers = iforest_results[iforest_results['Anomaly'] == 1]
-    outliers.to_csv('outliers.csv')
+    out = outliers.to_csv(directory+'outliers.csv')
 
-    return
-
-
-
-def reject_outliers(url, url_out):
-    """
-    Outlier rejection for smoothing. url_out: outliers.csv output from detect_outliers.
-    url['time] and url_out['time] must be of format 'yyyy-mm-ddTHH:MM:SS.000'.
-    """
-    df = pd.read_csv(url)
-    df.set_index(pd.DatetimeIndex(df['time']), inplace=True)
-    df = df.drop(columns=['time'])
-    
-    df_out = pd.read_csv(url_out)
+    df_out = pd.read_csv(os.path.join(directory, 'outliers.csv'))
     df_out.set_index(pd.DatetimeIndex(df_out['time']), inplace=True)
     df_out = df_out.drop(columns=['time', 'Anomaly', 'Anomaly_Score'])
     df_out = df_out.loc[:, ~df_out.columns.str.contains('^Unnamed')]
     
     df = pd.concat([df, df_out])
     df = df[~df.index.duplicated(keep=False)]
+    df.set_index(pd.DatetimeIndex(df['time']), inplace=True)
+    df = df.drop(['time'], axis=1)
     ts = TimeSeries.from_pandas(df)
-
+    
     return ts
 
 
 
-def bin_lc(out_dir, ts):
+def bin_lc(directory, ts):
     """
     Fold and bin light curve.
     """
-    ts['diff_mag'] = ts['diff_mag'] - np.mean(ts['diff_mag'])
     ts_folded = ts.fold(period=0.3439788 * u.day)
     del ts_folded['filter', 'color']
-    
-    ts_binned = aggregate_downsample(ts_folded, time_bin_size=60 * u.s)
-    fig, ax = plt.subplots(1,1, figsize=(12,10))
-    plt.scatter(ts_folded.time.jd, ts_folded['diff_mag'], c='k')
-    plt.scatter(ts_binned.time_bin_start.jd, ts_binned['diff_mag'], c='crimson', marker='x')
-    plt.ylim(0.3,-0.3)
-    plt.savefig(out_dir+'/lc_binned.png')
+
+    ts_binned = aggregate_downsample(ts_folded, time_bin_size=60*u.s)
+
+    plt.scatter(ts_folded.time.jd, ts_folded['diff_mag'], c='k', s=5)
+    plt.scatter(ts_binned.time_bin_start.jd, ts_binned['diff_mag'], c='crimson', s=3, marker='x')
+    plt.xlabel('phase')
+    plt.ylabel('normalized dmag')
+    plt.ylim(0.9, 0.3)
+    plt.savefig(directory+'/lc_binned.pdf', bbox_inches='tight', overwrite=True)
 
     return
 
+
+
+def diff_phot_target(directory, refnum):
+    """
+    Differential photometry on target.
+    """
+    ts = TimeSeries.read(os.path.join(directory, 'norm_target_flux.ecsv'), time_column='time')
+    ref = TimeSeries.read(os.path.join(directory, 'norm_ref_flux.ecsv'), time_column='time')
+
+    ts['target_mag'] = -2.5 * np.log10(ts['target_flux']) + 25
+    ts['target_flux_err'] = np.sqrt(ts['target_flux'])
+    ts['target_mag_err'] = 2.512 * ts['target_flux_err'] / (ts['target_flux'] * np.log(10))
+
+    ref['ref_mag'] = -2.5 * np.log10(ref['ref_flux']) + 25
+    ref['ref_flux_err'] = np.sqrt(ref['ref_flux'])
+    ref['ref_mag_err'] = 2.512 * ref['ref_flux_err'] / (ref['ref_flux'] * np.log(10))
+
+    g_ts = ts[ts['filter'] == 'g']
+    g_ref = ref[ref['filter'] == 'g']
+
+    fig, axes = plt.subplots(2, 1, figsize=(20,12))
+    axes[0].scatter(g_ts.time.datetime64, g_ts['target_mag'], c='k', s=5, label='target mag')
+    axes[0].scatter(g_ref.time.datetime64, g_ref['ref_mag'][:,refnum-1], c='crimson', s=5, label='ref mag')
+
+    g_ts['diff_mag'] = g_ts['target_mag'] - (g_ref['ref_mag'][:,refnum-1])
+    g_ts.write(directory+'/diff_lc.ecsv', overwrite=True)
+
+    axes[1].scatter(g_ts.time.datetime64, g_ts['diff_mag'], c='k', s=5, label='dmag')
+
+    axes[0].legend()
+    axes[1].legend()
+    plt.savefig(directory+'/diff_phot.pdf', bbox_inches='tight')
+
+    return
+
+
+
+def diff_phot_ref(directory, refnum1, refnum2):
+    ref = TimeSeries.read(os.path.join(directory, 'norm_ref_flux.ecsv'), time_column='time')
+
+    ref['ref1_mag'] = -2.5 * np.log10(ref['ref_flux'][:,refnum1-1]) + 25
+    ref['ref2_mag'] = -2.5 * np.log10(ref['ref_flux'][:,refnum2-1]) + 25
+
+    g_ref = ref[ref['filter'] == 'g']
+
+    fig, axes = plt.subplots(2, 1, figsize=(20,12))
+    axes[0].scatter(g_ref.time.datetime64, g_ref['ref1_mag'], c='k', s=5, label='target ref')
+    axes[0].scatter(g_ref.time.datetime64, g_ref['ref2_mag'], c='crimson', s=5, label='ref')
+
+    g_ref['diff_mag'] = (g_ref['ref1_mag']) - (g_ref['ref2_mag'])
+    g_ref.write(directory+'/diff_lc_ref.ecsv', overwrite=True)
+
+    axes[1].scatter(g_ref.time.datetime64, g_ref['diff_mag'], c='k', s=5, label='dmag')
+    
+    axes[0].legend()
+    axes[1].legend()
+    plt.savefig(directory+'/diff_phot_ref.pdf', bbox_inches='tight')
+
+    return
 
 # %%

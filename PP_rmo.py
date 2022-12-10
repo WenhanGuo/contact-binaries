@@ -24,6 +24,9 @@ directory = '/Volumes/TMO_Data_4TB/cb_data/C01+13/20221121/aligned'
 cubelist = sorted(glob1(directory, '*.fits'))
 out_dir = '/Volumes/TMO_Data_4TB/cb_data/C01+13/20221121'
 
+obj_dir = '/Volumes/TMO_Data_4TB/cb_data/C01+13'
+save_dir = '/Users/TMObserver/Documents/cb_scripts'
+
 # %%
 hdulist = fits.open(os.path.join(directory, cubelist[0]))
 hdu = hdulist[0]
@@ -68,127 +71,24 @@ table, RFM = LCs_visualizer(directory=out_dir, visu_dir=out_dir,
                                     mode='full', layout=[3,5])
 
 # %%
-reflist = [1, 2]
-diff_lc_name = os.path.join(out_dir, 'diff_lc.ecsv')
+# reflist = [1, 2]
+# diff_lc_name = os.path.join(out_dir, 'diff_lc.ecsv')
 
-diff_lc = differential_photometry(directory=out_dir, reflist=reflist)
-diff_lc.write(diff_lc_name, overwrite=True)
-
-
-# %%
-obj_dir = '/Users/danny/Mirror/ASTRO/JPL_NEO/Contact_Binary/data/CSS_034852'
-
-fold_lc(obj_dir=obj_dir, table='diff_lc.ecsv')
+# diff_lc = differential_photometry(directory=out_dir, reflist=reflist)
+# diff_lc.write(diff_lc_name, overwrite=True)
 
 # %%
-# to be beautified
-def diff_phot(out_dir, refnum):
-    ts = TimeSeries.read(os.path.join(out_dir, 'norm_target_flux.ecsv'), time_column='time')
-    ref = TimeSeries.read(os.path.join(out_dir, 'norm_ref_flux.ecsv'), time_column='time')
-
-    ts['target_mag'] = -2.5 * np.log10(ts['target_flux']) + 25
-    ts['target_flux_err'] = np.sqrt(ts['target_flux'])
-    ts['target_mag_err'] = 2.512 * ts['target_flux_err'] / (ts['target_flux'] * np.log(10))
-
-    ref['ref_mag'] = -2.5 * np.log10(ref['ref_flux']) + 25
-    ref['ref_flux_err'] = np.sqrt(ref['ref_flux'])
-    ref['ref_mag_err'] = 2.512 * ref['ref_flux_err'] / (ref['ref_flux'] * np.log(10))
-
-    g_ts = ts[ts['filter'] == 'g']
-    g_ref = ref[ref['filter'] == 'g']
-
-    fig, axes = plt.subplots(2, 1, figsize=(20,12))
-    axes[0].scatter(g_ts.time.datetime64, g_ts['target_mag'], c='crimson', s=5, label='target mag')
-    axes[0].scatter(g_ref.time.datetime64, g_ref['ref_mag'][:,refnum-1], c='black', s=5, label='ref mag')
-
-    g_ts['diff_mag'] = g_ts['target_mag'] - (g_ref['ref_mag'][:,refnum-1])
-    g_ts.write(out_dir+'/diff_lc.ecsv', overwrite=True)
-
-    axes[1].scatter(g_ts.time.datetime64, g_ts['diff_mag'], c='crimson', s=5, label='diff mag')
-
-    axes[0].legend()
-    axes[1].legend()
-    plt.savefig(out_dir+'/test.pdf', bbox_inches='tight')
-
-    return
-
-diff_phot('/Volumes/TMO_Data_4TB/cb_data/C01+13/20221106', 5)
-diff_phot('/Volumes/TMO_Data_4TB/cb_data/C01+13/20221120', 4)
-diff_phot('/Volumes/TMO_Data_4TB/cb_data/C01+13/20221121', 5)
+# obj_dir = '/Users/danny/Mirror/ASTRO/JPL_NEO/Contact_Binary/data/CSS_034852'
+# fold_lc(obj_dir=obj_dir, table='diff_lc.ecsv')
 
 # %%
-def detect_outliers(url, fraction):
-    """
-    Outlier detection for smoothing.
-    fraction: fraction of data set that wants to be identified as outliers.
-    """
-    df = pd.read_csv(url)
-    df.set_index(pd.DatetimeIndex(df['time']), inplace=True)
-    df.drop(['time'], axis=1)
-
-    df['diff_mag'] = np.float64(df['diff_mag'])
-    df['avg_mag'] = df['diff_mag'].rolling(6).mean()
-    
-    df.drop('avg_mag', axis=1, inplace=True)
-    
-    s = setup(df, session_id=123)
-    iforest = create_model('iforest', fraction=fraction)
-    iforest_results = assign_model(iforest)
-    
-    outliers = iforest_results[iforest_results['Anomaly'] == 1]
-    outliers.to_csv('outliers.csv')
-
-    return
-
-def reject_outliers(url, url_out):
-    """
-    Outlier rejection for smoothing. url_out: outliers.csv output from detect_outliers.
-    url['time] and url_out['time] must be of format 'yyyy-mm-ddTHH:MM:SS.000'.
-    """
-    df = pd.read_csv(url)
-    df.set_index(pd.DatetimeIndex(df['time']), inplace=True)
-    df = df.drop(columns=['time'])
-    
-    df_out = pd.read_csv(url_out)
-    df_out = df_out.loc[:, ~df_out.columns.str.contains('^Unnamed')]
-    df_out.set_index(pd.DatetimeIndex(df_out['time']), inplace=True)
-    df_out = df_out.drop(columns=['time', 'Anomaly', 'Anomaly_Score'])
-    
-    df = pd.concat([df, df_out])
-    df = df[~df.index.duplicated(keep=False)]
-    ts = TimeSeries.from_pandas(df)
-
-    return ts
-
-def bin_lc(out_dir, ts):
-    """
-    Fold and bin light curve.
-    """
-    ts['diff_mag'] = ts['diff_mag'] - np.mean(ts['diff_mag'])
-    ts_folded = ts.fold(period=0.3439788 * u.day)
-    del ts_folded['filter', 'color']
-    
-    ts_binned = aggregate_downsample(ts_folded, time_bin_size=60 * u.s)
-    fig, ax = plt.subplots(1,1, figsize=(12,10))
-    plt.scatter(ts_folded.time.jd, ts_folded['diff_mag'], c='k')
-    plt.scatter(ts_binned.time_bin_start.jd, ts_binned['diff_mag'], c='crimson', marker='x')
-    plt.ylim(0.3,-0.3)
-    plt.savefig(out_dir+'/lc_binned.png')
-
-    return
+# Differential photometry on target
+diff_phot_target('/Volumes/TMO_Data_4TB/cb_data/C01+13/20221106', 5)
+diff_phot_target('/Volumes/TMO_Data_4TB/cb_data/C01+13/20221120', 4)
+diff_phot_target('/Volumes/TMO_Data_4TB/cb_data/C01+13/20221121', 5)
 
 # %%
-url = 'https://raw.githubusercontent.com/WenhanGuo/contact-binaries/master/ts_3nights.csv'
-url_out = 'https://raw.githubusercontent.com/WenhanGuo/contact-binaries/master/outliers.csv'
-
-detect_outliers(url, 0.3)
-ts = reject_outliers(url, url_out)
-bin_lc(out_dir, ts)
-
-# %%
-obj_dir = '/Volumes/TMO_Data_4TB/cb_data/C01+13'
 date_folders = glob1(obj_dir, '[0-9]*')
-# date_folders = ['20221106', '20221121']
 joined_ts = 1.0   # init value placeholder
 table = 'diff_lc.ecsv'
 
@@ -213,49 +113,27 @@ folded_ts = joined_ts.fold(period=0.3439788 * u.day)
 
 plt.scatter(folded_ts.time.jd, folded_ts['diff_mag'], c=folded_ts['color'], 
                         s=10, marker='x', alpha=1, linewidth=0.5)
-
-plt.ylim(0.9,0.35)
-plt.savefig(obj_dir+'/lc_r10.pdf')
-
+plt.xlabel('phase')
+plt.ylabel('dmag')
+plt.ylim(0.9,0.3)
+plt.savefig(save_dir+'/lc_r10.pdf', bbox_inches='tight', overwrite=True)
 
 # %%
-def diff_phot_ref(out_dir, refnum1, refnum2):
-    ref = TimeSeries.read(os.path.join(out_dir, 'norm_ref_flux.ecsv'), time_column='time')
+# Outlier rejection and lc binning
+url = 'https://raw.githubusercontent.com/WenhanGuo/contact-binaries/master/ts_3nights.csv'
+url_out = 'https://raw.githubusercontent.com/WenhanGuo/contact-binaries/master/outliers.csv'
 
-    ref['target_mag'] = -2.5 * np.log10(ref['ref_flux'][:,refnum1-1]) + 25
-    ref['ref_mag'] = -2.5 * np.log10(ref['ref_flux'][:,refnum2-1]) + 25
+ts = reject_outliers(save_dir, url, 0.3)
+bin_lc(save_dir, ts)
 
-    g_ref = ref[ref['filter'] == 'g']
-
-    fig, axes = plt.subplots(1, 2, figsize=(20,12))
-    axes[0].scatter(g_ref.time.datetime64, g_ref['target_mag'], label='target')
-    axes[0].scatter(g_ref.time.datetime64, g_ref['ref_mag'], label='ref1')
-
-    g_diff = (g_ref['target_mag']) - (g_ref['ref_mag'])
-    # g_diff = g_diff - np.mean(g_diff) .  # normalization is what causes problems in folding
-    g_ref['diff_mag'] = g_diff
-    g_ref.write(out_dir+'/diff_lc_ref.ecsv', overwrite=True)
-
-    axes[1].scatter(g_ref.time.datetime64, g_diff)
-    # axes[1].set_ylim(2.9, 2.3)
-
-    axes[0].legend()
-    axes[0].legend()
-    axes[0].legend()
-    axes[0].legend()
-    plt.tight_layout()
-    plt.savefig(out_dir+'/test_ref.pdf')
-
-    return
-
+# %%
+# Differential photometry on a reference star of choice
 diff_phot_ref('/Volumes/TMO_Data_4TB/cb_data/C01+13/20221106', 5, 2)
 diff_phot_ref('/Volumes/TMO_Data_4TB/cb_data/C01+13/20221120', 4, 1)
 diff_phot_ref('/Volumes/TMO_Data_4TB/cb_data/C01+13/20221121', 5, 1)
 
 # %%
-obj_dir = '/Volumes/TMO_Data_4TB/cb_data/C01+13'
 date_folders = glob1(obj_dir, '[0-9]*')
-# date_folders = ['20221106', '20221121']
 joined_ts = 1.0   # init value placeholder
 table = 'diff_lc_ref.ecsv'
 
