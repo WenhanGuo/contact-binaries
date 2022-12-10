@@ -11,7 +11,6 @@ from phot_functions import *
 from astropy.timeseries import TimeSeries, aggregate_downsample
 from astropy.table import vstack
 import astropy.units as u
-from pycaret.anomaly import *
 
 import pandas as pd
 import numpy as np
