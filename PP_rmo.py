@@ -128,9 +128,9 @@ bin_lc(save_dir, ts)
 
 # %%
 # Differential photometry on a reference star of choice
-diff_phot_ref('/Volumes/TMO_Data_4TB/cb_data/C01+13/20221106', 5, 2)
-diff_phot_ref('/Volumes/TMO_Data_4TB/cb_data/C01+13/20221120', 4, 1)
-diff_phot_ref('/Volumes/TMO_Data_4TB/cb_data/C01+13/20221121', 5, 1)
+diff_phot_ref('/Volumes/TMO_Data_4TB/cb_data/C01+13/20221106', 2, 5)
+diff_phot_ref('/Volumes/TMO_Data_4TB/cb_data/C01+13/20221120', 1, 4)
+diff_phot_ref('/Volumes/TMO_Data_4TB/cb_data/C01+13/20221121', 1, 5)
 
 # %%
 date_folders = glob1(obj_dir, '[0-9]*')
@@ -140,7 +140,7 @@ table = 'diff_lc_ref.ecsv'
 for date in date_folders:
     ts = TimeSeries.read(os.path.join(obj_dir, date, table), time_column='time')
     ts['obs_no'] = date
-    ts = ts['time', 'target_mag', 'ref_mag', 'diff_mag', 'obs_no']
+    ts = ts['time', 'ref1_mag', 'ref2_mag', 'diff_mag', 'obs_no']
     if type(joined_ts) == float:
         joined_ts = ts
     else:
@@ -162,4 +162,4 @@ plt.scatter(folded_ts.time.jd, folded_ts['diff_mag'], c=folded_ts['color'],
 plt.xlabel('phase')
 plt.ylabel('diff mag')
 plt.ylim(-1.85,-2.1)
-plt.savefig(obj_dir+'/vari_ref.pdf')
+plt.savefig(obj_dir+'/vari_ref.pdf', bbox_inches='tight', overwrite=True)
