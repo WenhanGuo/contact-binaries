@@ -17,7 +17,7 @@ b.add_dataset('mesh', compute_phases=meshphases, dataset='mesh01', columns=['tef
 # single star bare mesh, no color
 b.set_value_all('gravb_bol', 0)
 b.run_compute(model='default', overwrite=True)
-b.plot('mesh01', phase=0, show=True, save='./physics_visu/1star_bare.png')
+b.plot('mesh01', fc='teffs', phase=0, fcmap='viridis', show=True, save='./physics_visu/1star_bare1.png')
 
 # %%
 # single star mesh, gravity darkening & teffs color
